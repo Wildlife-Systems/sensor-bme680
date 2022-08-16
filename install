@@ -12,4 +12,6 @@ chmod +x sensor-bme680
 mv sensor-bme680 /usr/bin
 
 sudo mkdir -p /var/aao/sensors
-sudo touch /var/aao/sensors/bme680
+wget https://raw.githubusercontent.com/Wildlife-Systems/sensor-bme680/main/bme680
+chown root:root bme680
+mv bme680 /var/aao/sensors/
