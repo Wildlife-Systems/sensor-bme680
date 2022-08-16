@@ -5,6 +5,7 @@ sudo apt-get install git python3-setuptools python3-dev -y
 git clone https://github.com/Wildlife-Systems/sensor-bme680-py.git
 cd sensor-bme680-py/library/
 sudo python3 setup.py install
+cd ~
 
 wget https://raw.githubusercontent.com/Wildlife-Systems/sensor-bme680/main/sensor-bme680
 chown root:root sensor-bme680
