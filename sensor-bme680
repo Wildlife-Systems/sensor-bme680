@@ -5,11 +5,6 @@ import time
 import os
 import json
 
-stream = os.popen('raspi-config nonint get_i2c')
-i2c_state = stream.read()
-stream = os.popen('sudo raspi-config nonint do_i2c 0')
-
-
 try:
     sensor = bme680.BME680(bme680.I2C_ADDR_PRIMARY)
 except (RuntimeError, IOError):
@@ -77,5 +72,3 @@ while waiting_for_reading:
     waiting_for_reading = False
 
 print("[",json.dumps(temperature),",",json.dumps(humidity),",",json.dumps(pressure),",",json.dumps(gas),"]")
-
-stream = os.popen('sudo raspi-config nonint do_i2c ' + i2c_state)
