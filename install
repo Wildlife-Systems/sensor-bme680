@@ -10,3 +10,6 @@ wget https://raw.githubusercontent.com/Wildlife-Systems/sensor-bme680/main/senso
 chown root:root sensor-bme680
 chmod +x sensor-bme680
 mv sensor-bme680 /usr/bin
+
+sudo mkdir -p /var/aao/sensors
+sudo touch /var/aoo/sensors/bme680
