@@ -71,4 +71,4 @@ while waiting_for_reading:
 
     waiting_for_reading = False
 
-print(json.dumps(temperature),",",json.dumps(humidity),",",json.dumps(pressure),",",json.dumps(gas))
+print("[",json.dumps(temperature),",",json.dumps(humidity),",",json.dumps(pressure),",",json.dumps(gas),"]")
