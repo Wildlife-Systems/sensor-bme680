@@ -12,4 +12,4 @@ chmod +x sensor-bme680
 mv sensor-bme680 /usr/bin
 
 sudo mkdir -p /var/aao/sensors
-sudo touch /var/aoo/sensors/bme680
+sudo touch /var/aao/sensors/bme680
