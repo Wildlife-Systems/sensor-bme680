@@ -1,0 +1,74 @@
+#!/usr/bin/env python
+
+import bme680
+import time
+import os
+import json
+
+try:
+    sensor = bme680.BME680(bme680.I2C_ADDR_PRIMARY)
+except (RuntimeError, IOError):
+    sensor = bme680.BME680(bme680.I2C_ADDR_SECONDARY)
+
+# These calibration data can safely be commented
+# out, if desired.
+
+#print('Calibration data:')
+#for name in dir(sensor.calibration_data):
+#
+#    if not name.startswith('_'):
+#        value = getattr(sensor.calibration_data, name)
+#
+#        if isinstance(value, int):
+#            print('{}: {}'.format(name, value))
+
+# These oversampling settings can be tweaked to
+# change the balance between accuracy and noise in
+# the data.
+
+sensor.set_humidity_oversample(bme680.OS_2X)
+sensor.set_pressure_oversample(bme680.OS_4X)
+sensor.set_temperature_oversample(bme680.OS_8X)
+sensor.set_filter(bme680.FILTER_SIZE_3)
+sensor.set_gas_status(bme680.ENABLE_GAS_MEAS)
+
+sensor.set_gas_heater_temperature(320)
+sensor.set_gas_heater_duration(150)
+sensor.select_gas_heater_profile(0)
+
+#Get template JSON respone
+stream = os.popen('sc-prototype')
+output = stream.read()
+
+temperature = json.loads(output)
+humidity = json.loads(output)
+pressure = json.loads(output)
+gas = json.loads(output)
+
+temperature["sensor"] = "bme680_temperature"
+temperature["measures"] = "temperature"
+temperature["unit"] = "Celsius"
+
+humidity["sensor"] = "bme680_humidity"
+humidity["measures"] = "huidity"
+humidity["unit"] = "percentage"
+
+pressure["sensor"] = "bme680_pressure"
+pressure["measures"] = "pressure"
+pressure["unit"] = "hPa"
+
+gas["sensor"] = "bme680_gas"
+gas["measures"] = "resistance"
+gas["unit"] = "Ohms"
+
+waiting_for_reading = True
+while waiting_for_reading:
+  if sensor.get_sensor_data() and sensor.data.heat_stable:
+    temperature["value"] = sensor.data.temperature
+    humidity["value"] = sensor.data.humidity
+    pressure["value"] = sensor.data.pressure
+    gas["value"] = sensor.data.gas_resistance
+
+    waiting_for_reading = False
+
+print(json.dumps(temperature),",",json.dumps(humidity),",",json.dumps(pressure),",",json.dumps(gas))
