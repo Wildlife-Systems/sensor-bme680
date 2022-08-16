@@ -14,4 +14,4 @@ mv sensor-bme680 /usr/bin
 sudo mkdir -p /var/aao/sensors
 wget https://raw.githubusercontent.com/Wildlife-Systems/sensor-bme680/main/bme680
 chown root:root bme680
-mv bme680 /var/aao/sensors/
+mv bme680 /var/aao/sensors
