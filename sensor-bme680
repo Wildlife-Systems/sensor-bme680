@@ -1,5 +1,15 @@
 #!/usr/bin/env python3
 
+import sys
+
+if len(sys.argv) == 1:
+  if sys.argv[1] == "identify":
+    sys.exit(60)
+  if sys.argv[1] == "list":
+    print("temperature")
+    print("humidity)
+    sys.exit(0)
+
 import bme680
 import time
 import os
