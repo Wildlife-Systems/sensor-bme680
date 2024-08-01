@@ -50,7 +50,7 @@ temperature["measures"] = "temperature"
 temperature["unit"] = "Celsius"
 
 humidity["sensor"] = "bme680_humidity"
-humidity["measures"] = "huidity"
+humidity["measures"] = "humidity"
 humidity["unit"] = "percentage"
 
 pressure["sensor"] = "bme680_pressure"
