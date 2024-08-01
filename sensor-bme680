@@ -7,7 +7,7 @@ if len(sys.argv) == 2:
     sys.exit(60)
   if sys.argv[1] == "list":
     print("temperature")
-    print("humidity)
+    print("humidity")
     sys.exit(0)
 
 import bme680
