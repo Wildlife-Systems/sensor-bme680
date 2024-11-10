@@ -1,6 +1,6 @@
 #!/bin/bash
 sudo apt-get update
-sudo apt-get install git python3-setuptools python3-dev -y
+sudo apt-get install git python3-setuptools python3-smbus python3-dev -y
 
 git clone https://github.com/Wildlife-Systems/sensor-bme680-py.git
 cd sensor-bme680-py/library/
