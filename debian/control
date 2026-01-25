@@ -1,0 +1,7 @@
+Source: bme680-sensor
+Section: misc
+Priority: optional
+Maintainer: Your Name <youremail@example.com>
+Build-Depends: debhelper (>= 9), gcc
+Standards-Version: 3.9.6
+Homepage: https://github.com/yourrepo/bme680-sensor
