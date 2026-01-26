@@ -145,7 +145,6 @@ static void build_sensor_json(char *output, size_t output_len,
     float value, int internal, const char *sensor_id,
     const char *sensor_name, const char *error_msg, time_t timestamp) {
     const char *prototype = ws_get_prototype_cached();
-    char value_str[32];
     char timestamp_str[32];
     if (!prototype || !*prototype) {
         output[0] = '\0';
@@ -160,18 +159,17 @@ static void build_sensor_json(char *output, size_t output_len,
     if (sensor_name && sensor_name[0] != '\0') {
         ws_json_replace_null_string(output, "sensor_name", sensor_name);
     }
-    ws_json_replace_null_string(output, "internal", internal ? "true" : "false");
+    ws_json_replace_null_bool(output, "internal", internal);
     snprintf(timestamp_str, sizeof(timestamp_str), "%ld", (long)timestamp);
     ws_json_replace_null_string(output, "timestamp", timestamp_str);
     if (error_msg) {
         char escaped_error[256];
         ws_json_escape_string(error_msg, escaped_error, sizeof(escaped_error));
-        ws_json_replace_null_value(output, "value");
+        ws_json_replace_null_bool(output, "value", 0);
         ws_json_replace_null_string(output, "error", escaped_error);
     } else {
-        snprintf(value_str, sizeof(value_str), "%.3f", value);
-        ws_json_replace_null_number(output, "value", value_str);
-        ws_json_replace_null_value(output, "error");
+        ws_json_replace_null_number(output, "value", (double)value);
+        // Leave error as null - don't replace it
     }
 }
 
