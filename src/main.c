@@ -160,6 +160,7 @@ static void build_sensor_json(char *output, size_t output_len,
     const char *sensor_name, const char *error_msg, time_t timestamp) {
     const char *prototype = ws_get_prototype_cached();
     char timestamp_str[32];
+    char config_str[64];
     if (!prototype || !*prototype) {
         output[0] = '\0';
         return;
@@ -176,6 +177,9 @@ static void build_sensor_json(char *output, size_t output_len,
     ws_json_replace_null_bool(output, "internal", internal);
     snprintf(timestamp_str, sizeof(timestamp_str), "%ld", (long)timestamp);
     ws_json_replace_null_string(output, "timestamp", timestamp_str);
+    // Set config field with software_version
+    snprintf(config_str, sizeof(config_str), "{\\\"software_version\\\":\\\"%s\\\"}", VERSION);
+    ws_json_replace_null_string(output, "config", config_str);
     if (error_msg) {
         char escaped_error[256];
         ws_json_escape_string(error_msg, escaped_error, sizeof(escaped_error));
@@ -184,17 +188,6 @@ static void build_sensor_json(char *output, size_t output_len,
     } else {
         ws_json_replace_null_number(output, "value", (double)value);
         // Leave error as null - don't replace it
-    }
-    
-    // Insert software_version field before closing brace
-    char *closing_brace = strrchr(output, '}');
-    if (closing_brace) {
-        char version_field[64];
-        snprintf(version_field, sizeof(version_field), ",\"software_version\":\"%s\"}", VERSION);
-        size_t remaining = output_len - (closing_brace - output);
-        if (strlen(version_field) < remaining) {
-            strcpy(closing_brace, version_field);
-        }
     }
 }
 
