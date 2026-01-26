@@ -7,8 +7,8 @@ override_dh_auto_build:
 	$(MAKE)
 
 override_dh_auto_install:
-	$(MAKE) DESTDIR=$(CURDIR)/debian/bme680-sensor PREFIX=/usr install
+	$(MAKE) DESTDIR=$(CURDIR)/debian/sensor-bme680 PREFIX=/usr install
 
 override_dh_auto_clean:
 	$(MAKE) clean
-	rm -rf debian/bme680-sensor debian/.debhelper
+	rm -rf debian/sensor-bme680 debian/.debhelper

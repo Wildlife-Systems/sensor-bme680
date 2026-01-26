@@ -1,4 +1,4 @@
-Source: bme680-sensor
+Source: sensor-bme680
 Section: misc
 Priority: optional
 Maintainer: Ed Baker <ed@ebaker.me.uk>
@@ -6,7 +6,7 @@ Build-Depends: debhelper-compat (= 13)
 Standards-Version: 4.6.0
 Homepage: https://github.com/Wildlife-Systems/sensor-bme680
 
-Package: bme680-sensor
+Package: sensor-bme680
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: BME680 sensor reading utility

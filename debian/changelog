@@ -1,4 +1,4 @@
-bme680-sensor (2.0.0) stable; urgency=medium
+sensor-bme680 (2.0.0) stable; urgency=medium
 
   * Rewrite in C
 

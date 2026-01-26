@@ -1,5 +1,5 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: bme680-sensor
+Upstream-Name: sensor-bme680
 Upstream-Contact: Ed Baker <ed@ebaker.me.uk>
 Source: https://github.com/Wildlife-Systems/sensor-bme680
 
