@@ -226,7 +226,7 @@ static void output_json(sensor_config_t *configs, int count, const char *filter,
         
         // Read sensor (I2C already open)
         if (i2c_error[0] != '\0') {
-            strncpy(reading.error_msg, i2c_error, sizeof(reading.error_msg) - 1);
+            snprintf(reading.error_msg, sizeof(reading.error_msg), "%s", i2c_error);
             error_msg = reading.error_msg;
         } else if (!sensor_initialized) {
             snprintf(reading.error_msg, sizeof(reading.error_msg), "Sensor not initialized");
