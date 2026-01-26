@@ -146,7 +146,6 @@ static void build_sensor_json(char *output, size_t output_len,
     const char *sensor_name, const char *error_msg, time_t timestamp) {
     const char *prototype = ws_get_prototype_cached();
     char value_str[32];
-    char quoted[512];
     char timestamp_str[32];
     if (!prototype || !*prototype) {
         output[0] = '\0';
@@ -154,17 +153,12 @@ static void build_sensor_json(char *output, size_t output_len,
     }
     strncpy(output, prototype, output_len - 1);
     output[output_len - 1] = '\0';
-    snprintf(quoted, sizeof(quoted), "\"%s\"", sensor);
-    ws_json_replace_null_string(output, "sensor", quoted);
-    snprintf(quoted, sizeof(quoted), "\"%s\"", measures);
-    ws_json_replace_null_string(output, "measures", quoted);
-    snprintf(quoted, sizeof(quoted), "\"%s\"", unit);
-    ws_json_replace_null_string(output, "unit", quoted);
-    snprintf(quoted, sizeof(quoted), "\"%s\"", sensor_id);
-    ws_json_replace_null_string(output, "sensor_id", quoted);
+    ws_json_replace_null_string(output, "sensor", sensor);
+    ws_json_replace_null_string(output, "measures", measures);
+    ws_json_replace_null_string(output, "unit", unit);
+    ws_json_replace_null_string(output, "sensor_id", sensor_id);
     if (sensor_name && sensor_name[0] != '\0') {
-        snprintf(quoted, sizeof(quoted), "\"%s\"", sensor_name);
-        ws_json_replace_null_string(output, "sensor_name", quoted);
+        ws_json_replace_null_string(output, "sensor_name", sensor_name);
     }
     ws_json_replace_null_string(output, "internal", internal ? "true" : "false");
     snprintf(timestamp_str, sizeof(timestamp_str), "%ld", (long)timestamp);
@@ -172,13 +166,12 @@ static void build_sensor_json(char *output, size_t output_len,
     if (error_msg) {
         char escaped_error[256];
         ws_json_escape_string(error_msg, escaped_error, sizeof(escaped_error));
-        ws_json_replace_null_string(output, "value", "null");
-        snprintf(quoted, sizeof(quoted), "\"%s\"", escaped_error);
-        ws_json_replace_null_string(output, "error", quoted);
+        ws_json_replace_null_value(output, "value");
+        ws_json_replace_null_string(output, "error", escaped_error);
     } else {
-        snprintf(value_str, sizeof(value_str), "%.1f", value);
-        ws_json_replace_null_string(output, "value", value_str);
-        ws_json_replace_null_string(output, "error", "null");
+        snprintf(value_str, sizeof(value_str), "%.3f", value);
+        ws_json_replace_null_number(output, "value", value_str);
+        ws_json_replace_null_value(output, "error");
     }
 }
 
