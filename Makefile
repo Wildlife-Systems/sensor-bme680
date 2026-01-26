@@ -10,6 +10,7 @@ LDFLAGS = -lwildlifesystems
 
 PREFIX = /usr/local
 BINDIR = $(PREFIX)/bin
+MANDIR = $(PREFIX)/share/man/man1
 
 SRCDIR = src
 TARGET = sensor-bme680
@@ -27,10 +28,12 @@ $(TARGET): $(SOURCES) $(HEADERS)
 debug: CFLAGS += -g -DDEBUG
 debug: $(TARGET)
 
-# Install the binary
+# Install the binary and man page
 install: $(TARGET)
 	install -d $(DESTDIR)$(BINDIR)
 	install -m 755 $(TARGET) $(DESTDIR)$(BINDIR)/
+	install -d $(DESTDIR)$(MANDIR)
+	install -m 644 man/sensor-bme680.1 $(DESTDIR)$(MANDIR)/
 
 # Uninstall
 uninstall:

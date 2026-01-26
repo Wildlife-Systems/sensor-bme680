@@ -1,0 +1,41 @@
+.TH SENSOR-BME680 1 "January 2026" "sensor-bme680 2.0.0" "User Commands"
+.SH NAME
+sensor-bme680 \- read BME680 environmental sensor data
+.SH SYNOPSIS
+.B sensor-bme680
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+.B sensor-bme680
+reads temperature, humidity, pressure, and gas resistance data from a
+Bosch BME680 environmental sensor connected via I2C and outputs the
+readings in JSON format.
+.SH OPTIONS
+.TP
+.B identify
+Output sensor identification information in JSON format.
+.TP
+.B internal
+Output only readings from sensors marked as internal.
+.TP
+.B external
+Output only readings from sensors marked as external.
+.TP
+.B temperature
+Output only temperature readings.
+.TP
+.B humidity
+Output only humidity readings.
+.TP
+.B pressure
+Output only pressure readings.
+.TP
+.B gas
+Output only gas resistance readings.
+.SH FILES
+.TP
+.I /etc/ws/sensors/bme680.json
+Configuration file for sensor settings.
+.SH AUTHOR
+Ed Baker <ed@ebaker.me.uk>
+.SH SEE ALSO
+.BR i2cdetect (8)
