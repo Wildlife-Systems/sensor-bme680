@@ -1,0 +1,12 @@
+[
+  {
+    "internal": false,
+    "sensor_id": "lab_bme680_1",
+    "sensor_name": "Lab BME680"
+  },
+  {
+    "internal": true,
+    "sensor_id": "internal_bme680",
+    "sensor_name": "Internal BME680"
+  }
+]

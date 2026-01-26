@@ -1,5 +1,5 @@
-bme680-sensor (0.1-1) unstable; urgency=low
+bme680-sensor (2.0.0) stable; urgency=medium
 
-  * Initial release
+  * Rewrite in C
 
- -- Your Name <youremail@example.com>  Sat, 25 Jan 2026 12:00:00 +0000
+ -- Ed Baker <ed@ebaker.me.uk>  Sun, 25 Jan 2026 12:00:00 +0000

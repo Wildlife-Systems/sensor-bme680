@@ -1,1 +1,1 @@
-usr/bin/bme680-sensor
+etc/ws/sensors/bme680.json.EXAMPLES usr/share/doc/bme680-sensor/examples/

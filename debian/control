@@ -1,7 +1,13 @@
 Source: bme680-sensor
 Section: misc
 Priority: optional
-Maintainer: Your Name <youremail@example.com>
-Build-Depends: debhelper (>= 9), gcc
-Standards-Version: 3.9.6
-Homepage: https://github.com/yourrepo/bme680-sensor
+Maintainer: Ed Baker <ed@ebaker.me.uk>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.0
+Homepage: https://github.com/Wildlife-Systems/sensor-bme680
+
+Package: bme680-sensor
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: BME680 sensor reading utility
+ Simple C program to read BME680 sensor and output JSON.
