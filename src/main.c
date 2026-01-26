@@ -160,7 +160,7 @@ static void build_sensor_json(char *output, size_t output_len,
     const char *sensor_name, const char *error_msg, time_t timestamp) {
     const char *prototype = ws_get_prototype_cached();
     char timestamp_str[32];
-    char config_str[64];
+    char config_obj[64];
     if (!prototype || !*prototype) {
         output[0] = '\0';
         return;
@@ -178,8 +178,19 @@ static void build_sensor_json(char *output, size_t output_len,
     snprintf(timestamp_str, sizeof(timestamp_str), "%ld", (long)timestamp);
     ws_json_replace_null_string(output, "timestamp", timestamp_str);
     // Set config field with software_version as nested JSON object
-    snprintf(config_str, sizeof(config_str), "{\"software_version\":\"%s\"}", VERSION);
-    ws_json_replace_null_object(output, "config", config_str);
+    // Manually replace "config":null with "config":{...}
+    snprintf(config_obj, sizeof(config_obj), "{\"software_version\":\"%s\"}", VERSION);
+    char *config_pos = strstr(output, "\"config\":null");
+    if (config_pos) {
+        char *after_null = config_pos + 13; // skip "config":null
+        size_t prefix_len = config_pos - output + 9; // up to and including "config":
+        size_t suffix_len = strlen(after_null);
+        size_t config_len = strlen(config_obj);
+        if (prefix_len + config_len + suffix_len < output_len) {
+            memmove(config_pos + 9 + config_len, after_null, suffix_len + 1);
+            memcpy(config_pos + 9, config_obj, config_len);
+        }
+    }
     if (error_msg) {
         char escaped_error[256];
         ws_json_escape_string(error_msg, escaped_error, sizeof(escaped_error));
