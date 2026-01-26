@@ -5,7 +5,6 @@
 
 #define BME680_I2C_ADDR_PRIMARY   0x76
 #define BME680_I2C_ADDR_SECONDARY 0x77
-#define BME680_I2C_ADDR BME680_I2C_ADDR_PRIMARY
 
 
 // Structure to hold calibration data

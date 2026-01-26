@@ -6,9 +6,7 @@
 #include <sys/ioctl.h>
 #include <linux/i2c-dev.h>
 
-// BME680 register addresses and compensation plan
 #define BME680_REG_ID 0xD0
-// ... (other register addresses)
 
 
 // Helper to read 1 byte
