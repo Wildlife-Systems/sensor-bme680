@@ -177,9 +177,9 @@ static void build_sensor_json(char *output, size_t output_len,
     ws_json_replace_null_bool(output, "internal", internal);
     snprintf(timestamp_str, sizeof(timestamp_str), "%ld", (long)timestamp);
     ws_json_replace_null_string(output, "timestamp", timestamp_str);
-    // Set config field with software_version
-    snprintf(config_str, sizeof(config_str), "{\\\"software_version\\\":\\\"%s\\\"}", VERSION);
-    ws_json_replace_null_string(output, "config", config_str);
+    // Set config field with software_version as nested JSON object
+    snprintf(config_str, sizeof(config_str), "{\"software_version\":\"%s\"}", VERSION);
+    ws_json_replace_null_object(output, "config", config_str);
     if (error_msg) {
         char escaped_error[256];
         ws_json_escape_string(error_msg, escaped_error, sizeof(escaped_error));
