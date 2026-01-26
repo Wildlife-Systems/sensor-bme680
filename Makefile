@@ -1,8 +1,8 @@
 # Makefile for sensor-bme680 (C version)
 # Build BME680 sensor reader for Raspberry Pi using system libraries
 
-# Extract version from debian/changelog
-VERSION := $(shell head -n1 debian/changelog | sed 's/.*(//' | sed 's/).*//')
+# Extract version from debian/changelog using dpkg-parsechangelog
+VERSION := $(shell dpkg-parsechangelog -S Version 2>/dev/null || echo "0.0.0")
 
 CC = gcc
 CFLAGS = -Wall -Wextra -O2 -std=c99 -I/usr/include/ws -DVERSION=\"$(VERSION)\"

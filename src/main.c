@@ -12,8 +12,22 @@
 
 // Config path and default values
 #define CONFIG_PATH "/etc/ws/sensors/bme680.json"
-#define DEFAULT_I2C_ADDR BME680_I2C_ADDR
 #define DEFAULT_I2C_DEV "/dev/i2c-1"
+
+// Try to detect BME680 at primary address (0x76), then secondary (0x77)
+// Returns the detected address, or -1 if not found
+static int detect_i2c_address(int i2c_fd) {
+    uint8_t addresses[] = {BME680_I2C_ADDR_PRIMARY, BME680_I2C_ADDR_SECONDARY};
+    for (int i = 0; i < 2; i++) {
+        if (ioctl(i2c_fd, I2C_SLAVE, addresses[i]) < 0) continue;
+        uint8_t reg = 0xD0; // BME680 chip ID register
+        uint8_t id = 0;
+        if (write(i2c_fd, &reg, 1) == 1 && read(i2c_fd, &id, 1) == 1 && id == 0x61) {
+            return addresses[i];
+        }
+    }
+    return -1;
+}
 
 typedef struct {
     int internal;
@@ -179,6 +193,29 @@ static void output_json(sensor_config_t *configs, int count, const char *filter,
     if (!output) { fprintf(stderr, "Memory allocation failed\n"); return; }
     strcpy(output, "[");
     int first = 1;
+    
+    // Open I2C device once and auto-detect BME680 address
+    int i2c_fd = open(DEFAULT_I2C_DEV, O_RDWR);
+    int i2c_addr = -1;
+    struct bme680_calib_data calib;
+    int sensor_initialized = 0;
+    char i2c_error[128] = {0};
+    
+    if (i2c_fd < 0) {
+        snprintf(i2c_error, sizeof(i2c_error), "Failed to open I2C device");
+    } else {
+        i2c_addr = detect_i2c_address(i2c_fd);
+        if (i2c_addr < 0) {
+            snprintf(i2c_error, sizeof(i2c_error), "BME680 not found at 0x76 or 0x77");
+        } else if (ioctl(i2c_fd, I2C_SLAVE, i2c_addr) < 0) {
+            snprintf(i2c_error, sizeof(i2c_error), "Failed to set I2C address 0x%02X", i2c_addr);
+        } else if (bme680_init(i2c_fd, &calib) != 0) {
+            snprintf(i2c_error, sizeof(i2c_error), "BME680 init failed at 0x%02X", i2c_addr);
+        } else {
+            sensor_initialized = 1;
+        }
+    }
+    
     for (int i = 0; i < count; i++) {
         sensor_reading_t reading = {0};
         char *sensor_id = configs[i].sensor_id ? strdup(configs[i].sensor_id) : get_serial_number("bme680");
@@ -186,27 +223,19 @@ static void output_json(sensor_config_t *configs, int count, const char *filter,
         time_t read_timestamp = time(NULL);
         if (location_filter == 1 && !configs[i].internal) { free(sensor_id); continue; }
         if (location_filter == 2 && configs[i].internal) { free(sensor_id); continue; }
-        // Read sensor
-        int i2c_fd = open(DEFAULT_I2C_DEV, O_RDWR);
-        if (i2c_fd < 0) {
-            snprintf(reading.error_msg, sizeof(reading.error_msg), "Failed to open I2C device");
+        
+        // Read sensor (I2C already open)
+        if (i2c_error[0] != '\0') {
+            strncpy(reading.error_msg, i2c_error, sizeof(reading.error_msg) - 1);
             error_msg = reading.error_msg;
-        } else if (ioctl(i2c_fd, I2C_SLAVE, DEFAULT_I2C_ADDR) < 0) {
-            snprintf(reading.error_msg, sizeof(reading.error_msg), "Failed to set I2C address");
+        } else if (!sensor_initialized) {
+            snprintf(reading.error_msg, sizeof(reading.error_msg), "Sensor not initialized");
             error_msg = reading.error_msg;
-            close(i2c_fd);
+        } else if (bme680_read_data(i2c_fd, &calib, (struct bme680_data *)&reading) != 0) {
+            snprintf(reading.error_msg, sizeof(reading.error_msg), "Failed to read sensor data");
+            error_msg = reading.error_msg;
         } else {
-            struct bme680_calib_data calib;
-            if (bme680_init(i2c_fd, &calib) != 0) {
-                snprintf(reading.error_msg, sizeof(reading.error_msg), "BME680 not found or init failed");
-                error_msg = reading.error_msg;
-            } else if (bme680_read_data(i2c_fd, &calib, (struct bme680_data *)&reading) != 0) {
-                snprintf(reading.error_msg, sizeof(reading.error_msg), "Failed to read sensor data");
-                error_msg = reading.error_msg;
-            } else {
-                reading.valid = 1;
-            }
-            close(i2c_fd);
+            reading.valid = 1;
         }
         // Output JSON for each measurement
         if (!filter || strcmp(filter, "temperature") == 0 || strcmp(filter, "all") == 0) {
@@ -218,7 +247,12 @@ static void output_json(sensor_config_t *configs, int count, const char *filter,
                 reading.temperature, configs[i].internal, sensor_id_temp,
                 configs[i].sensor_name, error_msg, read_timestamp);
             size_t needed = strlen(output) + strlen(temp_json) + 3;
-            if (needed > output_size) { output_size = needed * 2; char *new_output = realloc(output, output_size); if (new_output) output = new_output; }
+            if (needed > output_size) {
+                output_size = needed * 2;
+                char *new_output = realloc(output, output_size);
+                if (!new_output) { fprintf(stderr, "Memory allocation failed\n"); free(output); return; }
+                output = new_output;
+            }
             if (!first) strcat(output, ",");
             strcat(output, temp_json);
             first = 0;
@@ -233,7 +267,12 @@ static void output_json(sensor_config_t *configs, int count, const char *filter,
                 reading.humidity, configs[i].internal, sensor_id_humid,
                 configs[i].sensor_name, error_msg, read_timestamp);
             size_t needed = strlen(output) + strlen(humid_json) + 3;
-            if (needed > output_size) { output_size = needed * 2; char *new_output = realloc(output, output_size); if (new_output) output = new_output; }
+            if (needed > output_size) {
+                output_size = needed * 2;
+                char *new_output = realloc(output, output_size);
+                if (!new_output) { fprintf(stderr, "Memory allocation failed\n"); free(output); return; }
+                output = new_output;
+            }
             if (!first) strcat(output, ",");
             strcat(output, humid_json);
             first = 0;
@@ -248,7 +287,12 @@ static void output_json(sensor_config_t *configs, int count, const char *filter,
                 reading.pressure / 100.0, configs[i].internal, sensor_id_press,
                 configs[i].sensor_name, error_msg, read_timestamp);
             size_t needed = strlen(output) + strlen(press_json) + 3;
-            if (needed > output_size) { output_size = needed * 2; char *new_output = realloc(output, output_size); if (new_output) output = new_output; }
+            if (needed > output_size) {
+                output_size = needed * 2;
+                char *new_output = realloc(output, output_size);
+                if (!new_output) { fprintf(stderr, "Memory allocation failed\n"); free(output); return; }
+                output = new_output;
+            }
             if (!first) strcat(output, ",");
             strcat(output, press_json);
             first = 0;
@@ -263,7 +307,12 @@ static void output_json(sensor_config_t *configs, int count, const char *filter,
                 reading.gas_resistance, configs[i].internal, sensor_id_gas,
                 configs[i].sensor_name, error_msg, read_timestamp);
             size_t needed = strlen(output) + strlen(gas_json) + 3;
-            if (needed > output_size) { output_size = needed * 2; char *new_output = realloc(output, output_size); if (new_output) output = new_output; }
+            if (needed > output_size) {
+                output_size = needed * 2;
+                char *new_output = realloc(output, output_size);
+                if (!new_output) { fprintf(stderr, "Memory allocation failed\n"); free(output); return; }
+                output = new_output;
+            }
             if (!first) strcat(output, ",");
             strcat(output, gas_json);
             first = 0;
@@ -271,6 +320,10 @@ static void output_json(sensor_config_t *configs, int count, const char *filter,
         }
         free(sensor_id);
     }
+    
+    // Close I2C device once after all readings
+    if (i2c_fd >= 0) close(i2c_fd);
+    
     strcat(output, "]");
     printf("%s\n", output);
     free(output);
@@ -290,7 +343,7 @@ int main(int argc, char *argv[]) {
             static const char *measurements[] = {"temperature", "humidity", "pressure", "gas", NULL};
             ws_cmd_list_multiple(measurements);
         } else if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0 || strcmp(argv[1], "version") == 0) {
-            ws_print_version("sensor-bme680", "1.0.0");
+            ws_print_version("sensor-bme680", VERSION);
             return 0;
         } else if (strcmp(argv[1], "temperature") == 0 || strcmp(argv[1], "humidity") == 0 || strcmp(argv[1], "pressure") == 0 || strcmp(argv[1], "gas") == 0) {
             filter = argv[1];

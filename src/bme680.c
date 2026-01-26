@@ -78,8 +78,8 @@ int bme680_read_data(int i2c_fd, struct bme680_calib_data *calib, struct bme680_
     // Set oversampling for temp, press, hum (1x oversampling for all)
     uint8_t ctrl_hum[2] = {0x72, 0x01}; // ctrl_hum: 0x72, value: 0x01 (osrs_h[2:0]=001)
     uint8_t ctrl_meas[2] = {0x74, 0x25}; // ctrl_meas: 0x74, value: 0x25 (osrs_t=001, osrs_p=001, mode=01)
-    write(i2c_fd, ctrl_hum, 2);
-    write(i2c_fd, ctrl_meas, 2);
+    if (write(i2c_fd, ctrl_hum, 2) != 2) return -1;
+    if (write(i2c_fd, ctrl_meas, 2) != 2) return -1;
     // Wait for measurement to complete (max 10ms for 1x oversampling)
     usleep(10000);
 
@@ -95,8 +95,7 @@ int bme680_read_data(int i2c_fd, struct bme680_calib_data *calib, struct bme680_
     int32_t adc_temp  = ((int32_t)buf[3] << 12) | ((int32_t)buf[4] << 4) | ((int32_t)buf[5] >> 4);
     int32_t adc_hum   = ((int32_t)buf[6] << 8) | (int32_t)buf[7];
 
-    // ...existing code...
-    fflush(stdout);
+
 
     // Temperature compensation (Bosch datasheet 9.2.3.3)
     int64_t var1, var2;
@@ -141,7 +140,7 @@ int bme680_read_data(int i2c_fd, struct bme680_calib_data *calib, struct bme680_
     // 1. Set gas sensor heater to enable gas measurement
     // Heater control: set nb conversion to 0, run gas measurement
     uint8_t ctrl_gas_1[2] = {0x71, 0x10}; // ctrl_gas_1: 0x71, value: 0x10 (run_gas=1, nb_conv=0)
-    write(i2c_fd, ctrl_gas_1, 2);
+    if (write(i2c_fd, ctrl_gas_1, 2) != 2) return -1;
     // Wait for gas measurement (max 250ms)
     usleep(250000);
 
