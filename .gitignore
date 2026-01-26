@@ -1,0 +1,12 @@
+# Build artifacts
+sensor-bme680
+*.o
+*.deb
+
+# Debian build directories
+debian/sensor-bme680/
+debian/.debhelper/
+debian/files
+debian/debhelper-build-stamp
+debian/*.substvars
+debian/*.log
