@@ -1,9 +1,9 @@
-.TH SENSOR-BME680 1 "January 2026" "sensor-bme680 2.0.0" "User Commands"
+.TH SENSOR-BME680 1 "January 2026" "sensor-bme680 2.0.0" "WildlifeSystems"
 .SH NAME
 sensor-bme680 \- read BME680 environmental sensor data
 .SH SYNOPSIS
 .B sensor-bme680
-[\fIOPTIONS\fR]
+[\fB\-\-version\fR|\fB\-v\fR|\fBversion\fR|\fBidentify\fR|\fBlist\fR|\fBsetup\fR|\fBenable\fR|\fBmock\fR|\fBinternal\fR|\fBexternal\fR|\fBall\fR]
 .SH DESCRIPTION
 .B sensor-bme680
 reads temperature, humidity, pressure, and gas resistance data from a
@@ -11,8 +11,26 @@ Bosch BME680 environmental sensor connected via I2C and outputs the
 readings in JSON format.
 .SH OPTIONS
 .TP
+.B \-\-version, \-v, version
+Print version information and exit.
+.TP
 .B identify
-Output sensor identification information in JSON format.
+Exit with code 60 for sensor identification.
+.TP
+.B list
+List available sensor types (temperature, humidity, pressure, gas).
+.TP
+.B setup
+Perform any sensor-specific setup. For BME680, no additional setup is required.
+.TP
+.B enable
+Enable any required kernel interfaces. For BME680, I2C should be enabled
+via raspi-config.
+.TP
+.B mock
+Output mock sensor data for testing without hardware. Returns fixed values
+(23.5\[de]C temperature, 45% humidity, 1013.25 hPa pressure, 50000 Ohms gas resistance)
+useful for testing data pipelines.
 .TP
 .B internal
 Output only readings from sensors marked as internal.
@@ -20,17 +38,8 @@ Output only readings from sensors marked as internal.
 .B external
 Output only readings from sensors marked as external.
 .TP
-.B temperature
-Output only temperature readings.
-.TP
-.B humidity
-Output only humidity readings.
-.TP
-.B pressure
-Output only pressure readings.
-.TP
-.B gas
-Output only gas resistance readings.
+.B all
+Output all sensor readings (default if no command given).
 .SH FILES
 .TP
 .I /etc/ws/sensors/bme680.json

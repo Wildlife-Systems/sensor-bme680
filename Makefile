@@ -5,8 +5,8 @@
 VERSION := $(shell dpkg-parsechangelog -S Version 2>/dev/null || echo "0.0.0")
 
 CC = gcc
-CFLAGS = -Wall -Wextra -O2 -std=c99 -I/usr/include/ws -DVERSION=\"$(VERSION)\"
-LDFLAGS = -lwildlifesystems
+CFLAGS = $(EXTRA_CFLAGS) -Wall -Wextra -O2 -std=c99 -I/usr/include/ws -DVERSION=\"$(VERSION)\"
+LDFLAGS = $(EXTRA_LDFLAGS) -lwildlifesystems
 
 PREFIX = /usr/local
 BINDIR = $(PREFIX)/bin

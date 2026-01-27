@@ -1,1 +1,2 @@
 etc/ws/sensors/bme680.json.EXAMPLES usr/share/doc/sensor-bme680/examples/
+bash-completion/sensor-bme680 usr/share/bash-completion/completions/
