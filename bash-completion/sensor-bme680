@@ -1,0 +1,21 @@
+# bash completion for sensor-bme680
+
+_sensor_bme680() {
+    local cur prev opts
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    # Available commands
+    opts="--version -v version identify list setup enable mock internal external all"
+
+    # Complete with available commands
+    if [[ ${COMP_CWORD} -eq 1 ]]; then
+        COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+        return 0
+    fi
+
+    return 0
+}
+
+complete -F _sensor_bme680 sensor-bme680
