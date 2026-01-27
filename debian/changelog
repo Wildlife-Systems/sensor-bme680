@@ -1,4 +1,4 @@
-sensor-bme680 (2.0.2) stable; urgency=medium
+sensor-bme680 (2.0.3) stable; urgency=medium
 
   * Rebuild against libwildlifesystems 1.1.1
 
