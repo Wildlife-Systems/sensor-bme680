@@ -51,7 +51,7 @@ int bme680_init(int i2c_fd, struct bme680_calib_data *calib) {
     i2c_read_byte(i2c_fd, 0xA0, &calib->par_p10);
     // Humidity
     uint8_t h1_lsb, h1_msb, h2_lsb, h2_msb;
-    i2c_read_byte(i2c_fd, 0xE2, &h1_msb); i2c_read_byte(i2c_fd, 0xE3, &h1_lsb);
+    i2c_read_byte(i2c_fd, 0xE3, &h1_msb); i2c_read_byte(i2c_fd, 0xE2, &h1_lsb);
     i2c_read_byte(i2c_fd, 0xE1, &h2_msb); i2c_read_byte(i2c_fd, 0xE2, &h2_lsb);
     calib->par_h1 = (h1_msb << 4) | (h1_lsb & 0x0F);
     calib->par_h2 = (h2_msb << 4) | (h2_lsb >> 4);
@@ -123,16 +123,18 @@ int bme680_read_data(int i2c_fd, struct bme680_calib_data *calib, struct bme680_
     }
     data->pressure = pressure;
 
-    // Humidity compensation (Bosch datasheet 9.2.3.5, simplified)
+    // Humidity compensation (Bosch BME68x API reference)
     int32_t temp_scaled = ((calib->t_fine * 5) + 128) >> 8;
     int32_t var_h1 = (adc_hum - ((int32_t)calib->par_h1 << 4)) - (((temp_scaled * (int32_t)calib->par_h3) / 100) >> 1);
     int32_t var_h2 = ((int32_t)calib->par_h2 * (((temp_scaled * (int32_t)calib->par_h4) / 100) + (((temp_scaled * ((temp_scaled * (int32_t)calib->par_h5) / 100)) >> 6) / 100) + (int32_t)(1 << 14))) >> 10;
-    int32_t var_h = var_h1 * var_h2;
-    var_h = var_h - ((((var_h >> 14) * (var_h >> 14)) >> 10) * ((int32_t)calib->par_h7));
-    var_h = var_h >> 1;
-    var_h = (var_h < 0 ? 0 : var_h);
-    var_h = (var_h > 419430400 ? 419430400 : var_h);
-    data->humidity = (float)(var_h >> 12) / 1024.0f;
+    int32_t var_h3 = var_h1 * var_h2;
+    int32_t var_h4 = (((int32_t)calib->par_h6 << 7) + ((temp_scaled * (int32_t)calib->par_h7) / 100)) >> 4;
+    int32_t var_h5 = ((var_h3 >> 14) * (var_h3 >> 14)) >> 10;
+    int32_t var_h6 = (var_h4 * var_h5) >> 1;
+    int32_t calc_hum = (((var_h3 + var_h6) >> 10) * 1000) >> 12;
+    if (calc_hum > 100000) calc_hum = 100000;
+    else if (calc_hum < 0) calc_hum = 0;
+    data->humidity = (float)calc_hum / 1000.0f;
 
     // Gas resistance reading and compensation (Bosch/Python reference)
     // 1. Set gas sensor heater to enable gas measurement
