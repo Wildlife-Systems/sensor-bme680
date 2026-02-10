@@ -1,3 +1,9 @@
+sensor-bme680 (2.1.0) stable; urgency=medium
+
+  * Fix humidity and gas calculations
+
+ -- Ed Baker <ed@ebaker.me.uk>  Tue, 10 Feb 2026 14:00:00 +0000
+
 sensor-bme680 (2.0.3) stable; urgency=medium
 
   * Rebuild against libwildlifesystems 1.1.1
