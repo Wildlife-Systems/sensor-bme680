@@ -71,27 +71,77 @@ int bme680_init(int i2c_fd, struct bme680_calib_data *calib) {
     return 0;
 }
 
+// Helper: calculate heater resistance register value (Bosch BME68x API reference)
+static uint8_t calc_res_heat(uint16_t target_temp, int16_t amb_temp, struct bme680_calib_data *calib) {
+    if (target_temp > 400) target_temp = 400;
+    int32_t var1 = (((int32_t)amb_temp * calib->par_gh3) / 1000) * 256;
+    int32_t var2 = (calib->par_gh1 + 784) *
+                   (((((calib->par_gh2 + 154009) * target_temp * 5) / 100) + 3276800) / 10);
+    int32_t var3 = var1 + (var2 / 2);
+    int32_t var4 = (var3 / (calib->res_heat_range + 4));
+    int32_t var5 = (131 * calib->res_heat_val) + 65536;
+    int32_t heatr_res_x100 = (int32_t)(((var4 / var5) - 250) * 34);
+    return (uint8_t)((heatr_res_x100 + 50) / 100);
+}
+
+// Helper: encode gas wait duration in ms to register value (Bosch BME68x API reference)
+static uint8_t calc_gas_wait(uint16_t dur) {
+    uint8_t factor = 0;
+    if (dur >= 0xfc0) return 0xff;
+    while (dur > 0x3F) {
+        dur /= 4;
+        factor++;
+    }
+    return (uint8_t)(dur + (factor * 64));
+}
+
 int bme680_read_data(int i2c_fd, struct bme680_calib_data *calib, struct bme680_data *data) {
-    // 1. Set sensor to forced mode and trigger measurement
-    // Set oversampling for temp, press, hum (1x oversampling for all)
-    uint8_t ctrl_hum[2] = {0x72, 0x01}; // ctrl_hum: 0x72, value: 0x01 (osrs_h[2:0]=001)
-    uint8_t ctrl_meas[2] = {0x74, 0x25}; // ctrl_meas: 0x74, value: 0x25 (osrs_t=001, osrs_p=001, mode=01)
+    // 1. Configure gas heater (320°C target, 150ms duration, 25°C ambient)
+    uint8_t res_heat = calc_res_heat(320, 25, calib);
+    uint8_t gas_wait = calc_gas_wait(150);
+    uint8_t res_heat_0[2] = {0x5A, res_heat};
+    uint8_t gas_wait_0[2] = {0x64, gas_wait};
+    if (write(i2c_fd, res_heat_0, 2) != 2) return -1;
+    if (write(i2c_fd, gas_wait_0, 2) != 2) return -1;
+
+    // 2. Enable gas measurement (run_gas=1, nb_conv=0)
+    uint8_t ctrl_gas_1[2] = {0x71, 0x10};
+    if (write(i2c_fd, ctrl_gas_1, 2) != 2) return -1;
+
+    // 3. Set oversampling and trigger forced mode
+    uint8_t ctrl_hum[2] = {0x72, 0x01};
+    uint8_t ctrl_meas[2] = {0x74, 0x25};
     if (write(i2c_fd, ctrl_hum, 2) != 2) return -1;
     if (write(i2c_fd, ctrl_meas, 2) != 2) return -1;
-    // Wait for measurement to complete (max 10ms for 1x oversampling)
-    usleep(10000);
 
-    // 2. Read all raw data in one burst (0x1F to 0x26)
+    // 4. Poll for measurement completion (new_data bit in status register)
+    uint8_t status = 0;
+    int retries = 50; // up to 500ms
+    do {
+        usleep(10000);
+        uint8_t sreg = 0x1D;
+        if (write(i2c_fd, &sreg, 1) != 1) return -1;
+        if (read(i2c_fd, &status, 1) != 1) return -1;
+    } while (!(status & 0x80) && --retries > 0);
+    if (retries == 0) return -3; // measurement timeout
+
+    // 5. Read T/P/H raw data (0x1F-0x26)
     uint8_t reg = 0x1F;
     uint8_t buf[8];
     if (write(i2c_fd, &reg, 1) != 1) return -1;
     if (read(i2c_fd, buf, 8) != 8) return -1;
-    // buf[0]: press_msb, buf[1]: press_lsb, buf[2]: press_xlsb
-    // buf[3]: temp_msb, buf[4]: temp_lsb, buf[5]: temp_xlsb
-    // buf[6]: hum_msb, buf[7]: hum_lsb
     int32_t adc_press = ((int32_t)buf[0] << 12) | ((int32_t)buf[1] << 4) | ((int32_t)buf[2] >> 4);
     int32_t adc_temp  = ((int32_t)buf[3] << 12) | ((int32_t)buf[4] << 4) | ((int32_t)buf[5] >> 4);
     int32_t adc_hum   = ((int32_t)buf[6] << 8) | (int32_t)buf[7];
+
+    // 6. Read gas raw data (0x2A-0x2B)
+    uint8_t gas_buf[2];
+    reg = 0x2A;
+    if (write(i2c_fd, &reg, 1) != 1) return -1;
+    if (read(i2c_fd, gas_buf, 2) != 2) return -1;
+    uint16_t adc_gas_res = ((uint16_t)gas_buf[0] << 2) | (gas_buf[1] >> 6);
+    uint8_t gas_valid = (gas_buf[1] >> 5) & 0x01;
+    uint8_t gas_range = gas_buf[1] & 0x0F;
 
 
 
@@ -100,7 +150,7 @@ int bme680_read_data(int i2c_fd, struct bme680_calib_data *calib, struct bme680_
     var1 = (((int32_t)adc_temp >> 3) - ((int32_t)calib->par_t1 << 1));
     var1 = (var1 * ((int32_t)calib->par_t2)) >> 11;
     var2 = (((((int32_t)adc_temp >> 4) - ((int32_t)calib->par_t1)) * (((int32_t)adc_temp >> 4) - ((int32_t)calib->par_t1))) >> 12);
-    var2 = (var2 * ((int32_t)calib->par_t3)) >> 14;
+    var2 = (var2 * (((int32_t)calib->par_t3) << 4)) >> 14;
     calib->t_fine = (int32_t)(var1 + var2);
     data->temperature = ((calib->t_fine * 5 + 128) >> 8) / 100.0f;
 
@@ -136,35 +186,22 @@ int bme680_read_data(int i2c_fd, struct bme680_calib_data *calib, struct bme680_
     else if (calc_hum < 0) calc_hum = 0;
     data->humidity = (float)calc_hum / 1000.0f;
 
-    // Gas resistance reading and compensation (Bosch/Python reference)
-    // 1. Set gas sensor heater to enable gas measurement
-    // Heater control: set nb conversion to 0, run gas measurement
-    uint8_t ctrl_gas_1[2] = {0x71, 0x10}; // ctrl_gas_1: 0x71, value: 0x10 (run_gas=1, nb_conv=0)
-    if (write(i2c_fd, ctrl_gas_1, 2) != 2) return -1;
-    // Wait for gas measurement (max 250ms)
-    usleep(250000);
-
-    // Read gas resistance registers (0x2A, 0x2B)
-    uint8_t gas_buf[2];
-    reg = 0x2A;
-    if (write(i2c_fd, &reg, 1) != 1) return -1;
-    if (read(i2c_fd, gas_buf, 2) != 2) return -1;
-    uint16_t adc_gas_res = ((uint16_t)gas_buf[0] << 2) | (gas_buf[1] >> 6);
-    uint8_t gas_range = gas_buf[1] & 0x0F;
-
-    // Full Bosch/Python formula for gas resistance
-    static const uint32_t lookupTable1[16] = {
-        2147483647, 2147483647, 2147483647, 2147483647, 2147483647, 2126008810, 2147483647, 2130303777,
-        2147483647, 2147483647, 2143188679, 2136746228, 2147483647, 2126008810, 2147483647, 2147483647
-    };
-    static const uint32_t lookupTable2[16] = {
-        4096000000, 2048000000, 1024000000, 512000000, 255744255, 127110228, 64000000, 32258064,
-        16016016, 8000000, 4000000, 2000000, 1000000, 500000, 250000, 125000
-    };
-    int64_t gas_var1 = (int64_t)((1340 + (5 * (int64_t)calib->range_sw_err)) * (int64_t)lookupTable1[gas_range]) >> 16;
-    int64_t gas_var2 = (((int64_t)((int64_t)adc_gas_res << 15) - 16777216) + gas_var1);
-    int64_t gas_var3 = ((int64_t)lookupTable2[gas_range] * (int64_t)gas_var1) >> 9;
-    float gas_res = (float)((gas_var3 + ((int64_t)gas_var2 >> 1)) / (int64_t)gas_var2);
-    data->gas_resistance = gas_res;
+    // Gas resistance compensation (Bosch BME68x API reference)
+    if (gas_valid) {
+        static const uint32_t lookupTable1[16] = {
+            2147483647, 2147483647, 2147483647, 2147483647, 2147483647, 2126008810, 2147483647, 2130303777,
+            2147483647, 2147483647, 2143188679, 2136746228, 2147483647, 2126008810, 2147483647, 2147483647
+        };
+        static const uint32_t lookupTable2[16] = {
+            4096000000, 2048000000, 1024000000, 512000000, 255744255, 127110228, 64000000, 32258064,
+            16016016, 8000000, 4000000, 2000000, 1000000, 500000, 250000, 125000
+        };
+        int64_t gas_var1 = (int64_t)((1340 + (5 * (int64_t)calib->range_sw_err)) * (int64_t)lookupTable1[gas_range]) >> 16;
+        int64_t gas_var2 = (((int64_t)((int64_t)adc_gas_res << 15) - 16777216) + gas_var1);
+        int64_t gas_var3 = ((int64_t)lookupTable2[gas_range] * (int64_t)gas_var1) >> 9;
+        data->gas_resistance = (float)((gas_var3 + ((int64_t)gas_var2 >> 1)) / (int64_t)gas_var2);
+    } else {
+        data->gas_resistance = 0.0f;
+    }
     return 0;
 }
