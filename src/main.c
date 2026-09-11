@@ -71,7 +71,7 @@ static int parse_i2c_addr(const char *ptr, const char *end) {
 // Parse a simple JSON config file - returns dynamically allocated array
 static sensor_config_t *load_config(const char *path, int *count) {
     char *buffer = NULL;
-    char *ptr;
+    const char *ptr;
     int sensor_idx = 0;
     sensor_config_t *configs = NULL;
     int sensor_count;
@@ -89,7 +89,9 @@ static sensor_config_t *load_config(const char *path, int *count) {
     
     ptr = buffer;
     while ((ptr = strchr(ptr, '{')) != NULL && sensor_idx < sensor_count) {
-        char *end = strchr(ptr, '}');
+        /* Matching brace, not the first one: a config entry may contain nested
+           objects or braces inside string values. */
+        const char *end = ws_json_object_end(ptr);
         if (!end) break;
         
         configs[sensor_idx].internal = ws_json_parse_bool(ptr, end, "internal", false);
