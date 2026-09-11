@@ -3,6 +3,9 @@ sensor-bme680
 *.o
 *.deb
 
+# Cygwin and MinGW gcc append .exe, which a bare binary name does not match
+*.exe
+
 # Debian build directories
 debian/sensor-bme680/
 debian/bme680-sensor/
