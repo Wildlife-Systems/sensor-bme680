@@ -8,7 +8,7 @@
  * This program reads temperature, humidity, pressure, and gas resistance
  * from Bosch BME680 sensors connected via I2C.
  *
- * License: MIT
+ * License: GPL-2+
  */
 
 #define _GNU_SOURCE
