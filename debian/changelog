@@ -1,5 +1,9 @@
 sensor-bme680 (2.3.0) stable; urgency=medium
 
+  * Build the output array with the library's JSON array builder instead of
+    realloc and strcat, which was repeated once per measurement. The four
+    near-identical blocks are now one call each
+  * Use the library's WS_UNIT_* constants rather than unit string literals
   * Config parsing moves to the library's ws_config_iter_* and the common
     fields to an embedded ws_sensor_config_base_t, leaving i2c_addr as the only
     field this driver declares and parses for itself
