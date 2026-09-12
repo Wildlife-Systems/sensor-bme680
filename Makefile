@@ -8,7 +8,9 @@ CC = gcc
 CFLAGS = $(EXTRA_CFLAGS) -Wall -Wextra -O2 -std=c99 -I/usr/include/ws -DVERSION=\"$(VERSION)\"
 LDFLAGS = $(EXTRA_LDFLAGS) -lwildlifesystems
 
-PREFIX = /usr/local
+# /usr, not /usr/local: sr looks for drivers in /usr/bin only, so a driver
+# installed by hand anywhere else is never found.
+PREFIX ?= /usr
 BINDIR = $(PREFIX)/bin
 MANDIR = $(PREFIX)/share/man/man1
 
@@ -38,6 +40,7 @@ install: $(TARGET)
 # Uninstall
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(TARGET)
+	rm -f $(DESTDIR)$(MANDIR)/sensor-bme680.1
 
 # Clean build artifacts
 clean:

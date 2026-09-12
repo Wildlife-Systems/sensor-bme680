@@ -1,0 +1,2 @@
+# We use "stable" for our own APT repository
+sensor-bme680 source: bad-distribution-in-changes-file stable
