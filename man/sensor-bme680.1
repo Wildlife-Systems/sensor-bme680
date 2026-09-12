@@ -1,50 +1,162 @@
-.TH SENSOR-BME680 1 "January 2026" "sensor-bme680 2.0.0" "WildlifeSystems"
+.TH SENSOR-BME680 1 "September 2026" "sensor-bme680 2.3.0" "WildlifeSystems"
 .SH NAME
-sensor-bme680 \- read BME680 environmental sensor data
+sensor-bme680 \- read BME680 environmental sensors
 .SH SYNOPSIS
 .B sensor-bme680
-[\fB\-\-version\fR|\fB\-v\fR|\fBversion\fR|\fBidentify\fR|\fBlist\fR|\fBsetup\fR|\fBenable\fR|\fBmock\fR|\fBinternal\fR|\fBexternal\fR|\fBall\fR]
+[\fB\-\-version\fR|\fB\-v\fR|\fBversion\fR|\fBidentify\fR|\fBlist\fR|\fBsetup\fR|\fBenable\fR|\fBmock\fR|\fBtemperature\fR|\fBhumidity\fR|\fBpressure\fR|\fBgas\fR|\fBinternal\fR|\fBexternal\fR|\fBall\fR]
 .SH DESCRIPTION
 .B sensor-bme680
-reads temperature, humidity, pressure, and gas resistance data from a
-Bosch BME680 environmental sensor connected via I2C and outputs the
-readings in JSON format.
-.SH OPTIONS
+reads temperature, humidity, pressure and gas resistance from Bosch BME680
+environmental sensors connected via I2C, and outputs the readings as a JSON
+array in the WildlifeSystems format, one reading per measurement. It is
+normally run by
+.BR sr (1).
+.SH COMMANDS
+Not specifying a command is equivalent to \fBall\fR.
 .TP
 .B \-\-version, \-v, version
-Print version information and exit.
+Print the version and exit.
 .TP
 .B identify
-Exit with code 60 for sensor identification.
+Exit with code 60, identifying the program as a WildlifeSystems sensor driver.
 .TP
 .B list
-List available sensor types (temperature, humidity, pressure, gas).
+List the measurements provided, one per line: temperature, humidity, pressure
+and gas. Each is also accepted as a command.
+.TP
+.B temperature, humidity, pressure, gas
+Output only that measurement from every sensor.
 .TP
 .B setup
-Perform any sensor-specific setup. For BME680, no additional setup is required.
+Report that no setup is required. The command is provided so that every driver
+answers the same commands.
 .TP
 .B enable
-Enable any required kernel interfaces. For BME680, I2C should be enabled
-via raspi-config.
+Enable the I2C interface by adding \fIdtparam=i2c_arm=on\fR to the Raspberry Pi
+boot configuration, or report that it is already enabled. Requires root. A
+reboot is required after the directive is first added.
 .TP
 .B mock
-Output mock sensor data for testing without hardware. Returns fixed values
-(23.5\[de]C temperature, 45% humidity, 1013.25 hPa pressure, 50000 Ohms gas resistance)
-useful for testing data pipelines.
+Output fixed readings in the real output format, for testing without hardware:
+23.5\[de]C, 45% humidity, 1013.25 hPa and 50000 Ohms, at location
+\fI{{node}}\fR.
 .TP
 .B internal
-Output only readings from sensors marked as internal.
+Output only readings from sensors configured as internal.
 .TP
 .B external
-Output only readings from sensors marked as external.
+Output only readings from sensors configured as external.
 .TP
 .B all
-Output all sensor readings (default if no command given).
+Output every measurement from every sensor.
+.SH CONFIGURATION
+The configuration file
+.I /etc/ws/sensors/bme680.json
+is a JSON array with one object per sensor. Without the file, a single sensor
+is detected automatically at address 0x76 or 0x77. Each object may contain the
+following fields.
+.TP
+.B i2c_addr
+The I2C address as a string, "0x76" or "0x77". If omitted, the address is
+detected automatically.
+.TP
+.B internal
+Whether the sensor is inside the enclosure. The default is false.
+.TP
+.B sensor_id
+A custom sensor identifier. If omitted, the identifier is
+\fI<serial>_bme680\fR, where \fI<serial>\fR is the Raspberry Pi serial number.
+Where more than one entry omits it, each is instead \fI<serial>_bme680_0x76\fR
+or \fI<serial>_bme680_0x77\fR, so that two sensors do not share an identifier.
+Each measurement appends its own name, giving for example
+\fI<serial>_bme680_temperature\fR.
+.TP
+.B sensor_name
+A human-readable name, reported in the \fBsensor_name\fR field.
+.TP
+.B location
+Where the sensor is: the string \fI{{node}}\fR for the position of the node,
+\fI{{none}}\fR for a sensor that has no position, or an object with
+\fBlatitude\fR and \fBlongitude\fR in decimal degrees and, optionally,
+\fBaltitude\fR and \fBaccuracy\fR in metres. If omitted, the \fBlocation\fR
+field of the reading is null.
+.PP
+An example configuration:
+.PP
+.nf
+[
+  {
+    "i2c_addr": "0x76",
+    "internal": false,
+    "sensor_name": "Weather station",
+    "location": "{{node}}"
+  }
+]
+.fi
+.SH OUTPUT
+A JSON array with one reading per measurement of each sensor. Each reading has
+the fields of the
+.BR sc-prototype (1)
+template. The fields filled in by this driver are as follows.
+.TP
+.B sensor
+"bme680_temperature", "bme680_humidity", "bme680_pressure" or
+"bme680_gas_resistance".
+.TP
+.B device
+"bme680".
+.TP
+.B measures
+"temperature", "humidity", "pressure" or "resistance".
+.TP
+.B unit
+"Celsius", "percentage", "hPa" or "Ohms".
+.TP
+.B value
+The reading, to three decimal places, or null if the reading failed.
+.TP
+.B error
+The reason the reading failed, or null. A reading never has both a value and
+an error.
+.TP
+.B sensor_id, sensor_name, internal, location
+Taken from the configuration, as described above.
+.TP
+.B timestamp
+The Unix time at which the sensor was read.
+.TP
+.B config
+The software version, the I2C address at which the sensor was read, and the
+calibration parameters used for the measurement.
+.PP
+The \fBnode_id\fR and \fBdeployment_id\fR fields are left null and are filled
+in by
+.BR sr (1).
 .SH FILES
 .TP
 .I /etc/ws/sensors/bme680.json
-Configuration file for sensor settings.
+The configuration file.
+.TP
+.I /dev/i2c-1
+The I2C bus from which the sensors are read.
+.TP
+.I /boot/firmware/config.txt
+The Raspberry Pi boot configuration, edited by \fBenable\fR
+(\fI/boot/config.txt\fR on older systems).
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 20
+An invalid argument, or the readings could not be produced at all, for example
+because \fBsc-prototype\fR was unavailable. Nothing is printed in that case.
+.TP
+.B 60
+The \fBidentify\fR command.
+.SH SEE ALSO
+.BR sr (1),
+.BR sc-prototype (1),
+.BR i2cdetect (8)
 .SH AUTHOR
 Ed Baker <ed@ebaker.me.uk>
-.SH SEE ALSO
-.BR i2cdetect (8)
