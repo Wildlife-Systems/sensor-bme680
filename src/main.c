@@ -24,7 +24,7 @@
 #include <ws_utils.h>
 
 // Config path and default values
-#define CONFIG_PATH "/etc/ws/sensors/bme680.json"
+#define CONFIG_PATH WS_CONFIG_PATH("bme680")
 #define DEFAULT_I2C_DEV "/dev/i2c-1"
 
 // Try to detect BME680 at primary address (0x76), then secondary (0x77)
@@ -82,7 +82,25 @@ static void addr_designation(const void *entry, char *buf, size_t cap) {
     }
 }
 
-// Parse a simple JSON config file - returns dynamically allocated array
+// The config to use when there is no file: one sensor, auto-detected,
+// identified by the node serial. Heap-allocated like a parsed config, so the
+// caller frees it the same way and needs no special case.
+static sensor_config_t *default_config(int *count) {
+    sensor_config_t *configs = calloc(1, sizeof(*configs));
+    if (!configs) return NULL;
+
+    configs[0].i2c_addr = 0;  // auto-detect
+    if (ws_config_assign_fallback_ids(configs, sizeof(*configs), 1, "bme680",
+                                      addr_designation) < 0) {
+        free(configs);
+        return NULL;
+    }
+    *count = 1;
+    return configs;
+}
+
+// Parse the config file, or fall back to the default when there is none.
+// Returns NULL only when out of memory.
 static sensor_config_t *load_config(const char *path, int *count) {
     ws_config_iter_t it;
     sensor_config_t *configs;
@@ -94,7 +112,7 @@ static sensor_config_t *load_config(const char *path, int *count) {
     n = ws_config_iter_open(&it, path);
     if (n <= 0) {
         ws_config_iter_close(&it);
-        return NULL;
+        return default_config(count);
     }
 
     configs = calloc((size_t)n, sizeof(*configs));
@@ -109,6 +127,11 @@ static sensor_config_t *load_config(const char *path, int *count) {
     }
 
     ws_config_iter_close(&it);
+
+    if (idx == 0) {
+        free(configs);
+        return default_config(count);
+    }
 
     // Entries without a sensor_id get one from the node serial. The library
     // keeps a lone entry at "<serial>_bme680", as the default config has
@@ -175,6 +198,7 @@ static int build_sensor_json(char *output, size_t output_len,
     char config_obj[512];
     char calib_json[384];
     char addr_str[16];
+    ws_json_builder_t config;
 
     // Build base JSON with common fields. The strings go in raw: the
     // library escapes them.
@@ -185,45 +209,35 @@ static int build_sensor_json(char *output, size_t output_len,
         ws_log_error("Could not build reading for %s", sensor);
         return -1;
     }
-    
-    // Build config object using helpers
-    ws_build_config_base(config_obj, sizeof(config_obj), VERSION);
-    
+
+    // The config object: software version, the address the sensor was read
+    // at, and its calibration. Built by the library's object builder, which
+    // escapes and reports overflow; a config that did not fit is left null
+    // rather than emitted truncated.
+    ws_json_builder_init(&config, config_obj, sizeof(config_obj));
+    ws_json_builder_start(&config);
+    ws_json_builder_add_string(&config, "software_version", VERSION);
+
     if (i2c_addr > 0) {
         snprintf(addr_str, sizeof(addr_str), "0x%02X", i2c_addr);
-        ws_config_add_string(config_obj, sizeof(config_obj), "i2c_addr", addr_str);
+        ws_json_builder_add_string(&config, "i2c_addr", addr_str);
     }
-    
+
     if (calib && i2c_addr > 0) {
         build_calibration_json(calib_json, sizeof(calib_json), measures, calib);
         if (calib_json[0] != '\0') {
-            ws_config_add_object(config_obj, sizeof(config_obj), "calibration", calib_json);
+            ws_json_builder_add_raw(&config, "calibration", calib_json);
         }
     }
-    
-    ws_config_end(config_obj);
-    ws_sensor_json_set_config(output, output_len, config_obj);
+
+    ws_json_builder_end(&config);
+    if (ws_json_builder_get(&config)) {
+        ws_sensor_json_set_config(output, output_len, config_obj);
+    }
     
     // Exactly one of value or error
     ws_sensor_json_set_result(output, output_len, (double)value, 3, error_msg);
     return 0;
-}
-
-// Build "<sensor_id>_<measurement>". Returns NULL if the id is unknown or the
-// allocation fails; the caller then emits the reading with a null sensor_id
-// rather than dereferencing NULL.
-static char *measurement_id(const char *sensor_id, const char *measurement) {
-    size_t len;
-    char *out;
-
-    if (!sensor_id) return NULL;
-
-    len = strlen(sensor_id) + strlen(measurement) + 2;  // '_' and terminator
-    out = malloc(len);
-    if (!out) return NULL;
-
-    snprintf(out, len, "%s_%s", sensor_id, measurement);
-    return out;
 }
 
 // Append one measurement of one sensor to the output array. The sensor_id
@@ -239,7 +253,7 @@ static void append_reading(ws_json_array_builder_t *out, const char *sensor_id,
     // An unknown id leaves "sensor_id":null, which records that it is
     // unknown. Dropping the reading instead would report the node as
     // having no sensors, which is worse and silent.
-    char *id = measurement_id(sensor_id, id_suffix);
+    char *id = ws_measurement_id(sensor_id, id_suffix);
 
     // A reading that could not be built is not added: the array would
     // refuse the empty item anyway, and fail as a whole.
@@ -284,8 +298,7 @@ static int output_json(sensor_config_t *configs, int count, const char *filter,
         const char *sensor_id;
         int addr;
 
-        if (location_filter == WS_LOCATION_INTERNAL && !configs[i].base.internal) continue;
-        if (location_filter == WS_LOCATION_EXTERNAL && configs[i].base.internal) continue;
+        if (!ws_location_filter_matches(location_filter, configs[i].base.internal)) continue;
 
         // Assigned at load time when the config omitted it; NULL only when
         // the node has no serial, and then reported as null.
@@ -358,11 +371,6 @@ int main(int argc, char *argv[]) {
     static const char *measurements[] = {"temperature", "humidity", "pressure", "gas", NULL};
     const char *filter = NULL;
     sensor_config_t *configs = NULL;
-    /* Zero-initialised: the default path sets each field explicitly except
-       location, which must read as WS_LOC_UNDECLARED rather than whatever
-       was on the stack. A garbage source of WS_LOC_EXPLICIT would emit a
-       GeoJSON Point built from uninitialised coordinates. */
-    sensor_config_t default_config = {0};
     int config_count = 0;
     ws_location_filter_t location_filter = WS_LOCATION_ALL;
     int status;
@@ -422,23 +430,13 @@ int main(int argc, char *argv[]) {
     if (status != 0) return status;
 
     configs = load_config(CONFIG_PATH, &config_count);
-    if (configs == NULL || config_count == 0) {
-        char *serial = ws_get_serial_with_suffix("bme680");
-        default_config.base.internal = false;
-        default_config.base.sensor_id = serial;
-        default_config.base.sensor_name = NULL;
-        default_config.i2c_addr = 0;  // 0 = auto-detect
-        configs = &default_config;
-        config_count = 1;
+    if (!configs) {
+        ws_log_error("Out of memory loading configuration");
+        return WS_EXIT_INVALID_ARG;
     }
 
     status = output_json(configs, config_count, filter, location_filter);
 
-    if (configs == &default_config) {
-        free(default_config.base.sensor_id);
-        free(default_config.base.sensor_name);
-    } else {
-        free_config(configs, config_count);
-    }
+    free_config(configs, config_count);
     return status;
 }

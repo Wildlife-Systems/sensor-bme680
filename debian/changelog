@@ -1,5 +1,15 @@
 sensor-bme680 (2.3.0) stable; urgency=medium
 
+  * The config object is built with the library's JSON object builder, which
+    escapes and reports overflow, rather than the config appenders, which did
+    neither and are gone from libwildlifesystems 1.3.0. Its content is
+    unchanged byte for byte. A config that does not fit is left null rather
+    than emitted truncated
+  * The default configuration, used when there is no config file, is built
+    by load_config on the heap like a parsed one, so there is one free path
+    rather than a stack special case; the measurement id and the location
+    filter test come from the library, which sensor-dht11 shared copies of;
+    and the config path is spelt with WS_CONFIG_PATH
   * Two config entries without a sensor_id no longer get the same one. Both
     used to be "<serial>_bme680", so a sensor at each I2C address was merged
     downstream into one series without a word. A lone entry keeps that id, so
