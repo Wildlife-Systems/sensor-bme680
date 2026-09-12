@@ -1,5 +1,7 @@
 sensor-bme680 (2.3.0) stable; urgency=medium
 
+  * A reading's timestamp is taken when the value is obtained, not before the
+    I2C read, so it means the same thing as in every other driver
   * Documentation: the README documented an "address" configuration key the
     driver has never read (it is i2c_addr), said enable merely reminds the
     user to run raspi-config, and showed the old bme680_gas name. The man
