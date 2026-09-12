@@ -1,5 +1,10 @@
 sensor-bme680 (2.3.0) stable; urgency=medium
 
+  * Packaging: a package description that says what the driver measures and
+    how it fits; Standards-Version 4.6.1; the lintian override for our
+    "stable" distribution; "make uninstall" removes the man page it installed;
+    "make install" defaults to PREFIX=/usr, where sr looks, not /usr/local
+  * The bash completion offers the four measurements the driver accepts
   * The config object is built with the library's JSON object builder, which
     escapes and reports overflow, rather than the config appenders, which did
     neither and are gone from libwildlifesystems 1.3.0. Its content is

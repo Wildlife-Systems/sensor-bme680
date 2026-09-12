@@ -8,7 +8,6 @@ sensor-bme680
 
 # Debian build directories
 debian/sensor-bme680/
-debian/bme680-sensor/
 debian/.debhelper/
 debian/files
 debian/debhelper-build-stamp

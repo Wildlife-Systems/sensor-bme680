@@ -3,11 +3,14 @@ Section: misc
 Priority: optional
 Maintainer: Ed Baker <ed@ebaker.me.uk>
 Build-Depends: debhelper-compat (= 13), libwildlifesystems-dev (>= 1.3.0)
-Standards-Version: 4.6.0
+Standards-Version: 4.6.1
 Homepage: https://github.com/Wildlife-Systems/sensor-bme680
 
 Package: sensor-bme680
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, sensor-control (>= 1.3.0)
-Description: BME680 sensor reading utility
- Simple C program to read BME680 sensor and output JSON.
+Suggests: bash-completion
+Description: Read BME680 environmental sensors
+ Reads temperature, humidity, pressure and gas resistance from Bosch BME680
+ sensors over I2C on a Raspberry Pi, and outputs readings in the JSON format
+ of the WildlifeSystems sensor framework, for use through sr(1).
