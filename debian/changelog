@@ -1,5 +1,10 @@
 sensor-bme680 (2.3.0) stable; urgency=medium
 
+  * "enable" now enables I2C, by adding dtparam=i2c_arm=on to the Pi boot
+    config, instead of printing a note telling the user to run raspi-config.
+    The kernel exposes no I2C bus until that is set, so a driver whose "enable"
+    did nothing left the sensor unusable by its own instructions. Running it
+    twice is safe: the second run reports that it is already enabled
   * Build the output array with the library's JSON array builder instead of
     realloc and strcat, which was repeated once per measurement. The four
     near-identical blocks are now one call each

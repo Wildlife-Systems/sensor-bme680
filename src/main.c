@@ -324,9 +324,12 @@ int main(int argc, char *argv[]) {
             ws_print_version("sensor-bme680", VERSION);
             return WS_EXIT_SUCCESS;
         } else if (strcmp(argv[1], "enable") == 0) {
-            /* BME680 uses I2C which is typically already enabled */
-            printf("BME680 sensor uses I2C - ensure I2C is enabled in raspi-config.\n");
-            return WS_EXIT_SUCCESS;
+            /* The kernel exposes no I2C bus until this is set, so enable it
+               rather than telling the user to go and run raspi-config. */
+            return ws_cmd_enable_boot_config("dtparam=i2c_arm=on",
+                                             "dtparam=i2c_arm",
+                                             "I2C interface",
+                                             "sensor-bme680");
         } else if (strcmp(argv[1], "setup") == 0) {
             /* BME680 has no setup requirements beyond I2C */
             printf("BME680 sensor requires no additional setup.\n");
