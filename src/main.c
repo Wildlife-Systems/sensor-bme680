@@ -197,28 +197,59 @@ static char *measurement_id(const char *sensor_id, const char *measurement) {
     return out;
 }
 
+// Append one measurement of one sensor to the output array. The sensor_id
+// suffix is given separately because the gas reading measures "resistance" but
+// is identified as "<id>_gas_resistance".
+static void append_reading(ws_json_array_builder_t *out, const char *sensor_id,
+                           const sensor_config_t *config, const char *sensor,
+                           const char *measures, const char *id_suffix,
+                           const char *unit, float value, const char *error_msg,
+                           time_t timestamp, struct bme680_calib_data *calib,
+                           int i2c_addr) {
+    char json[2048];
+    char *id = measurement_id(sensor_id, id_suffix);
+
+    if (!id) return;
+
+    build_sensor_json(json, sizeof(json), sensor, measures, unit, value,
+                      config->base.internal, id, config->base.sensor_name,
+                      error_msg, timestamp, calib, i2c_addr,
+                      &config->base.location);
+    ws_json_array_add(out, json);
+    free(id);
+}
+
 static void output_json(sensor_config_t *configs, int count, ws_location_filter_t location_filter) {
-    size_t output_size = 4096;
-    char *output = malloc(output_size);
-    if (!output) { fprintf(stderr, "Memory allocation failed\n"); return; }
-    strcpy(output, "[");
-    int first = 1;
-    
+    ws_json_array_builder_t out;
+    const char *json;
+    int i2c_fd;
+    int i;
+
+    if (ws_json_array_init(&out) != 0) {
+        fprintf(stderr, "Memory allocation failed\n");
+        return;
+    }
+
     // Open I2C device once
-    int i2c_fd = open(DEFAULT_I2C_DEV, O_RDWR);
-    
-    for (int i = 0; i < count; i++) {
+    i2c_fd = open(DEFAULT_I2C_DEV, O_RDWR);
+
+    for (i = 0; i < count; i++) {
         sensor_reading_t reading = {0};
         struct bme680_calib_data calib = {0};
-        int sensor_initialized = 0;
-        char *sensor_id = configs[i].base.sensor_id ? strdup(configs[i].base.sensor_id) : ws_get_serial_with_suffix("bme680");
+        struct bme680_calib_data *calib_out = NULL;
         const char *error_msg = NULL;
         time_t read_timestamp = time(NULL);
-        if (location_filter == WS_LOCATION_INTERNAL && !configs[i].base.internal) { free(sensor_id); continue; }
-        if (location_filter == WS_LOCATION_EXTERNAL && configs[i].base.internal) { free(sensor_id); continue; }
-        
+        char *sensor_id;
+        int addr;
+
+        if (location_filter == WS_LOCATION_INTERNAL && !configs[i].base.internal) continue;
+        if (location_filter == WS_LOCATION_EXTERNAL && configs[i].base.internal) continue;
+
+        sensor_id = configs[i].base.sensor_id ? strdup(configs[i].base.sensor_id)
+                                              : ws_get_serial_with_suffix("bme680");
+
         // Read sensor - use configured address or auto-detect
-        int addr = configs[i].i2c_addr;
+        addr = configs[i].i2c_addr;
         if (i2c_fd < 0) {
             snprintf(reading.error_msg, sizeof(reading.error_msg), "Failed to open I2C device");
             error_msg = reading.error_msg;
@@ -240,106 +271,37 @@ static void output_json(sensor_config_t *configs, int count, ws_location_filter_
                 snprintf(reading.error_msg, sizeof(reading.error_msg), "Failed to read sensor at 0x%02X", addr);
                 error_msg = reading.error_msg;
             } else {
-                sensor_initialized = 1;
+                calib_out = &calib;
             }
         }
-        
-        // Output JSON for temperature
-        {
-            char temp_json[2048];
-            char *sensor_id_temp = measurement_id(sensor_id, "temperature");
-            build_sensor_json(temp_json, sizeof(temp_json),
-                "bme680_temperature", "temperature", "Celsius",
-                reading.temperature, configs[i].base.internal, sensor_id_temp,
-                configs[i].base.sensor_name, error_msg, read_timestamp,
-                sensor_initialized ? &calib : NULL, addr, &configs[i].base.location);
-            size_t needed = strlen(output) + strlen(temp_json) + 3;
-            if (needed > output_size) {
-                output_size = needed * 2;
-                char *new_output = realloc(output, output_size);
-                if (!new_output) { fprintf(stderr, "Memory allocation failed\n"); free(output); return; }
-                output = new_output;
-            }
-            if (!first) strcat(output, ",");
-            strcat(output, temp_json);
-            first = 0;
-            free(sensor_id_temp);
-        }
-        
-        // Output JSON for humidity
-        {
-            char humid_json[2048];
-            char *sensor_id_humid = measurement_id(sensor_id, "humidity");
-            build_sensor_json(humid_json, sizeof(humid_json),
-                "bme680_humidity", "humidity", "percentage",
-                reading.humidity, configs[i].base.internal, sensor_id_humid,
-                configs[i].base.sensor_name, error_msg, read_timestamp,
-                sensor_initialized ? &calib : NULL, addr, &configs[i].base.location);
-            size_t needed = strlen(output) + strlen(humid_json) + 3;
-            if (needed > output_size) {
-                output_size = needed * 2;
-                char *new_output = realloc(output, output_size);
-                if (!new_output) { fprintf(stderr, "Memory allocation failed\n"); free(output); return; }
-                output = new_output;
-            }
-            if (!first) strcat(output, ",");
-            strcat(output, humid_json);
-            first = 0;
-            free(sensor_id_humid);
-        }
-        
-        // Output JSON for pressure
-        {
-            char press_json[2048];
-            char *sensor_id_press = measurement_id(sensor_id, "pressure");
-            build_sensor_json(press_json, sizeof(press_json),
-                "bme680_pressure", "pressure", "hPa",
-                reading.pressure / 100.0, configs[i].base.internal, sensor_id_press,
-                configs[i].base.sensor_name, error_msg, read_timestamp,
-                sensor_initialized ? &calib : NULL, addr, &configs[i].base.location);
-            size_t needed = strlen(output) + strlen(press_json) + 3;
-            if (needed > output_size) {
-                output_size = needed * 2;
-                char *new_output = realloc(output, output_size);
-                if (!new_output) { fprintf(stderr, "Memory allocation failed\n"); free(output); return; }
-                output = new_output;
-            }
-            if (!first) strcat(output, ",");
-            strcat(output, press_json);
-            first = 0;
-            free(sensor_id_press);
-        }
-        
-        // Output JSON for gas resistance
-        {
-            char gas_json[2048];
-            char *sensor_id_gas = measurement_id(sensor_id, "gas_resistance");
-            build_sensor_json(gas_json, sizeof(gas_json),
-                "bme680_gas", "resistance", "Ohms",
-                reading.gas_resistance, configs[i].base.internal, sensor_id_gas,
-                configs[i].base.sensor_name, error_msg, read_timestamp,
-                sensor_initialized ? &calib : NULL, addr, &configs[i].base.location);
-            size_t needed = strlen(output) + strlen(gas_json) + 3;
-            if (needed > output_size) {
-                output_size = needed * 2;
-                char *new_output = realloc(output, output_size);
-                if (!new_output) { fprintf(stderr, "Memory allocation failed\n"); free(output); return; }
-                output = new_output;
-            }
-            if (!first) strcat(output, ",");
-            strcat(output, gas_json);
-            first = 0;
-            free(sensor_id_gas);
-        }
+
+        append_reading(&out, sensor_id, &configs[i], "bme680_temperature",
+                       "temperature", "temperature", WS_UNIT_CELSIUS,
+                       reading.temperature, error_msg, read_timestamp, calib_out, addr);
+        append_reading(&out, sensor_id, &configs[i], "bme680_humidity",
+                       "humidity", "humidity", WS_UNIT_PERCENTAGE,
+                       reading.humidity, error_msg, read_timestamp, calib_out, addr);
+        append_reading(&out, sensor_id, &configs[i], "bme680_pressure",
+                       "pressure", "pressure", WS_UNIT_HPA,
+                       reading.pressure / 100.0f, error_msg, read_timestamp, calib_out, addr);
+        append_reading(&out, sensor_id, &configs[i], "bme680_gas",
+                       "resistance", "gas_resistance", WS_UNIT_OHMS,
+                       reading.gas_resistance, error_msg, read_timestamp, calib_out, addr);
+
         free(sensor_id);
     }
-    
+
     // Close I2C device once after all readings
     if (i2c_fd >= 0) close(i2c_fd);
-    
-    strcat(output, "]");
-    printf("%s\n", output);
-    free(output);
+
+    ws_json_array_end(&out);
+    json = ws_json_array_get(&out);
+    if (json) {
+        printf("%s\n", json);
+    } else {
+        fprintf(stderr, "Memory allocation failed\n");
+    }
+    ws_json_array_free(&out);
 }
 
 int main(int argc, char *argv[]) {
@@ -382,7 +344,7 @@ int main(int argc, char *argv[]) {
             /* Temperature */
             char temp_id[128];
             snprintf(temp_id, sizeof(temp_id), "%s_temperature", base);
-            if (ws_build_sensor_json_base(json, sizeof(json), "bme680_temperature", "bme680", "temperature", "Celsius",
+            if (ws_build_sensor_json_base(json, sizeof(json), "bme680_temperature", "bme680", "temperature", WS_UNIT_CELSIUS,
                                           temp_id, "Mock BME680", false, NULL, now) == 0) {
                 ws_sensor_json_set_value(json, 23.5, 3);
                 printf("%s", json);
@@ -390,7 +352,7 @@ int main(int argc, char *argv[]) {
             /* Humidity */
             char humid_id[128];
             snprintf(humid_id, sizeof(humid_id), "%s_humidity", base);
-            if (ws_build_sensor_json_base(json, sizeof(json), "bme680_humidity", "bme680", "humidity", "percentage",
+            if (ws_build_sensor_json_base(json, sizeof(json), "bme680_humidity", "bme680", "humidity", WS_UNIT_PERCENTAGE,
                                           humid_id, "Mock BME680", false, NULL, now) == 0) {
                 ws_sensor_json_set_value(json, 45.0, 3);
                 printf(",%s", json);
@@ -398,7 +360,7 @@ int main(int argc, char *argv[]) {
             /* Pressure */
             char press_id[128];
             snprintf(press_id, sizeof(press_id), "%s_pressure", base);
-            if (ws_build_sensor_json_base(json, sizeof(json), "bme680_pressure", "bme680", "pressure", "hPa",
+            if (ws_build_sensor_json_base(json, sizeof(json), "bme680_pressure", "bme680", "pressure", WS_UNIT_HPA,
                                           press_id, "Mock BME680", false, NULL, now) == 0) {
                 ws_sensor_json_set_value(json, 1013.25, 3);
                 printf(",%s", json);
@@ -406,7 +368,7 @@ int main(int argc, char *argv[]) {
             /* Gas */
             char gas_id[128];
             snprintf(gas_id, sizeof(gas_id), "%s_gas_resistance", base);
-            if (ws_build_sensor_json_base(json, sizeof(json), "bme680_gas", "bme680", "resistance", "Ohms",
+            if (ws_build_sensor_json_base(json, sizeof(json), "bme680_gas", "bme680", "resistance", WS_UNIT_OHMS,
                                           gas_id, "Mock BME680", false, NULL, now) == 0) {
                 ws_sensor_json_set_value(json, 50000.0, 3);
                 printf(",%s", json);
