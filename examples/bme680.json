@@ -1,0 +1,15 @@
+[
+  {
+    "i2c_addr": "0x76",
+    "internal": false,
+    "sensor_id": "shelter_bme680",
+    "sensor_name": "Stevenson screen",
+    "location": { "latitude": 51.4967, "longitude": -0.1764, "altitude": 12.0, "accuracy": 5.0 }
+  },
+  {
+    "i2c_addr": "0x77",
+    "internal": true,
+    "sensor_name": "Enclosure BME680",
+    "location": "{{node}}"
+  }
+]

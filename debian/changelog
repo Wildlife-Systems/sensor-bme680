@@ -1,5 +1,9 @@
 sensor-bme680 (2.3.0) stable; urgency=medium
 
+  * The example configuration is a plain JSON file, examples/bme680.json,
+    usable as it stands. It replaces one that opened with twenty lines of
+    comments that had to be removed before the file was valid JSON; the
+    option-by-option explanation is in the man page
   * A reading's timestamp is taken when the value is obtained, not before the
     I2C read, so it means the same thing as in every other driver
   * Documentation: the README documented an "address" configuration key the

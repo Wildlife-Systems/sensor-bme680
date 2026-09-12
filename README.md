@@ -98,6 +98,10 @@ single sensor is detected automatically at address 0x76 or 0x77.
 ]
 ```
 
+An example showing every option in use is installed as
+`/usr/share/doc/sensor-bme680/examples/bme680.json`; it is valid JSON and can
+be copied into place and edited.
+
 ### Configuration options
 
 - `i2c_addr`: the I2C address, `"0x76"` or `"0x77"`. If omitted, the address
