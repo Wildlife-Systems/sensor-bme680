@@ -1,5 +1,8 @@
 sensor-bme680 (2.3.0) stable; urgency=medium
 
+  * Config parsing moves to the library's ws_config_iter_* and the common
+    fields to an embedded ws_sensor_config_base_t, leaving i2c_addr as the only
+    field this driver declares and parses for itself
   * No longer crashes when no sensor_id can be determined. A config entry
     without sensor_id on a host whose /proc/cpuinfo has no Serial line (a
     non-Pi I2C host) left sensor_id NULL, which was then passed to strlen().

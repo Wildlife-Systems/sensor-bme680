@@ -42,12 +42,10 @@ static int detect_i2c_address(int i2c_fd) {
     return -1;
 }
 
+// The fields every driver shares live in base; i2c_addr is ours alone.
 typedef struct {
-    int internal;
-    char *sensor_id;
-    char *sensor_name;
+    ws_sensor_config_base_t base;
     int i2c_addr;  // 0x76, 0x77, or 0 for auto-detect
-    ws_location_t location;  // Where the sensor physically sits
 } sensor_config_t;
 
 typedef struct {
@@ -71,49 +69,39 @@ static int parse_i2c_addr(const char *ptr, const char *end) {
 
 // Parse a simple JSON config file - returns dynamically allocated array
 static sensor_config_t *load_config(const char *path, int *count) {
-    char *buffer = NULL;
-    const char *ptr;
-    int sensor_idx = 0;
-    sensor_config_t *configs = NULL;
-    int sensor_count;
-    
+    ws_config_iter_t it;
+    sensor_config_t *configs;
+    const char *entry, *entry_end;
+    int n, idx = 0;
+
     *count = 0;
-    
-    buffer = ws_read_file(path, NULL);
-    if (!buffer) return NULL;
-    
-    sensor_count = ws_json_count_objects(buffer);
-    if (sensor_count == 0) { free(buffer); return NULL; }
-    
-    configs = malloc(sensor_count * sizeof(sensor_config_t));
-    if (!configs) { free(buffer); return NULL; }
-    
-    ptr = buffer;
-    while ((ptr = strchr(ptr, '{')) != NULL && sensor_idx < sensor_count) {
-        /* Matching brace, not the first one: a config entry may contain nested
-           objects or braces inside string values. */
-        const char *end = ws_json_object_end(ptr);
-        if (!end) break;
-        
-        configs[sensor_idx].internal = ws_json_parse_bool(ptr, end, "internal", false);
-        configs[sensor_idx].sensor_id = ws_json_parse_string(ptr, end, "sensor_id");
-        configs[sensor_idx].sensor_name = ws_json_parse_string(ptr, end, "sensor_name");
-        configs[sensor_idx].i2c_addr = parse_i2c_addr(ptr, end);
-        ws_parse_sensor_location(ptr, end, &configs[sensor_idx].location);
-        
-        sensor_idx++;
-        ptr = end + 1;
+
+    n = ws_config_iter_open(&it, path);
+    if (n <= 0) {
+        ws_config_iter_close(&it);
+        return NULL;
     }
-    free(buffer);
-    *count = sensor_idx;
+
+    configs = calloc((size_t)n, sizeof(*configs));
+    if (!configs) {
+        ws_config_iter_close(&it);
+        return NULL;
+    }
+
+    while (ws_config_iter_next(&it, &configs[idx].base, &entry, &entry_end)) {
+        configs[idx].i2c_addr = parse_i2c_addr(entry, entry_end);
+        idx++;
+    }
+
+    ws_config_iter_close(&it);
+    *count = idx;
     return configs;
 }
 
 static void free_config(sensor_config_t *configs, int count) {
     if (configs) {
         for (int i = 0; i < count; i++) {
-            free(configs[i].sensor_id);
-            free(configs[i].sensor_name);
+            ws_sensor_config_free_fields(&configs[i].base);
         }
         free(configs);
     }
@@ -223,11 +211,11 @@ static void output_json(sensor_config_t *configs, int count, ws_location_filter_
         sensor_reading_t reading = {0};
         struct bme680_calib_data calib = {0};
         int sensor_initialized = 0;
-        char *sensor_id = configs[i].sensor_id ? strdup(configs[i].sensor_id) : ws_get_serial_with_suffix("bme680");
+        char *sensor_id = configs[i].base.sensor_id ? strdup(configs[i].base.sensor_id) : ws_get_serial_with_suffix("bme680");
         const char *error_msg = NULL;
         time_t read_timestamp = time(NULL);
-        if (location_filter == WS_LOCATION_INTERNAL && !configs[i].internal) { free(sensor_id); continue; }
-        if (location_filter == WS_LOCATION_EXTERNAL && configs[i].internal) { free(sensor_id); continue; }
+        if (location_filter == WS_LOCATION_INTERNAL && !configs[i].base.internal) { free(sensor_id); continue; }
+        if (location_filter == WS_LOCATION_EXTERNAL && configs[i].base.internal) { free(sensor_id); continue; }
         
         // Read sensor - use configured address or auto-detect
         int addr = configs[i].i2c_addr;
@@ -262,9 +250,9 @@ static void output_json(sensor_config_t *configs, int count, ws_location_filter_
             char *sensor_id_temp = measurement_id(sensor_id, "temperature");
             build_sensor_json(temp_json, sizeof(temp_json),
                 "bme680_temperature", "temperature", "Celsius",
-                reading.temperature, configs[i].internal, sensor_id_temp,
-                configs[i].sensor_name, error_msg, read_timestamp,
-                sensor_initialized ? &calib : NULL, addr, &configs[i].location);
+                reading.temperature, configs[i].base.internal, sensor_id_temp,
+                configs[i].base.sensor_name, error_msg, read_timestamp,
+                sensor_initialized ? &calib : NULL, addr, &configs[i].base.location);
             size_t needed = strlen(output) + strlen(temp_json) + 3;
             if (needed > output_size) {
                 output_size = needed * 2;
@@ -284,9 +272,9 @@ static void output_json(sensor_config_t *configs, int count, ws_location_filter_
             char *sensor_id_humid = measurement_id(sensor_id, "humidity");
             build_sensor_json(humid_json, sizeof(humid_json),
                 "bme680_humidity", "humidity", "percentage",
-                reading.humidity, configs[i].internal, sensor_id_humid,
-                configs[i].sensor_name, error_msg, read_timestamp,
-                sensor_initialized ? &calib : NULL, addr, &configs[i].location);
+                reading.humidity, configs[i].base.internal, sensor_id_humid,
+                configs[i].base.sensor_name, error_msg, read_timestamp,
+                sensor_initialized ? &calib : NULL, addr, &configs[i].base.location);
             size_t needed = strlen(output) + strlen(humid_json) + 3;
             if (needed > output_size) {
                 output_size = needed * 2;
@@ -306,9 +294,9 @@ static void output_json(sensor_config_t *configs, int count, ws_location_filter_
             char *sensor_id_press = measurement_id(sensor_id, "pressure");
             build_sensor_json(press_json, sizeof(press_json),
                 "bme680_pressure", "pressure", "hPa",
-                reading.pressure / 100.0, configs[i].internal, sensor_id_press,
-                configs[i].sensor_name, error_msg, read_timestamp,
-                sensor_initialized ? &calib : NULL, addr, &configs[i].location);
+                reading.pressure / 100.0, configs[i].base.internal, sensor_id_press,
+                configs[i].base.sensor_name, error_msg, read_timestamp,
+                sensor_initialized ? &calib : NULL, addr, &configs[i].base.location);
             size_t needed = strlen(output) + strlen(press_json) + 3;
             if (needed > output_size) {
                 output_size = needed * 2;
@@ -328,9 +316,9 @@ static void output_json(sensor_config_t *configs, int count, ws_location_filter_
             char *sensor_id_gas = measurement_id(sensor_id, "gas_resistance");
             build_sensor_json(gas_json, sizeof(gas_json),
                 "bme680_gas", "resistance", "Ohms",
-                reading.gas_resistance, configs[i].internal, sensor_id_gas,
-                configs[i].sensor_name, error_msg, read_timestamp,
-                sensor_initialized ? &calib : NULL, addr, &configs[i].location);
+                reading.gas_resistance, configs[i].base.internal, sensor_id_gas,
+                configs[i].base.sensor_name, error_msg, read_timestamp,
+                sensor_initialized ? &calib : NULL, addr, &configs[i].base.location);
             size_t needed = strlen(output) + strlen(gas_json) + 3;
             if (needed > output_size) {
                 output_size = needed * 2;
@@ -440,9 +428,9 @@ int main(int argc, char *argv[]) {
     configs = load_config(CONFIG_PATH, &config_count);
     if (configs == NULL || config_count == 0) {
         char *serial = ws_get_serial_with_suffix("bme680");
-        default_config.internal = 0;
-        default_config.sensor_id = serial;
-        default_config.sensor_name = NULL;
+        default_config.base.internal = false;
+        default_config.base.sensor_id = serial;
+        default_config.base.sensor_name = NULL;
         default_config.i2c_addr = 0;  // 0 = auto-detect
         configs = &default_config;
         config_count = 1;
@@ -451,8 +439,8 @@ int main(int argc, char *argv[]) {
     output_json(configs, config_count, location_filter);
 
     if (configs == &default_config) {
-        free(default_config.sensor_id);
-        free(default_config.sensor_name);
+        free(default_config.base.sensor_id);
+        free(default_config.base.sensor_name);
     } else {
         free_config(configs, config_count);
     }
