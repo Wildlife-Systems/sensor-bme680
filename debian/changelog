@@ -1,5 +1,9 @@
 sensor-bme680 (2.3.0) stable; urgency=medium
 
+  * Mock readings declare location "{{node}}", as sensor-onboard's mock
+    declares its physical sensors, so every driver's mock has one shape.
+    They used to emit location null, which is what an unconfigured sensor
+    reports, and so disagreed with the shell driver's mock
   * Fail with nothing printed, exit 20, when sc-prototype is unavailable. The
     template was checked per reading, after the sensor had been read, and the
     unbuilt reading was appended anyway: the output was "[,,,]" with exit 0,
