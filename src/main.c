@@ -139,23 +139,26 @@ static void build_calibration_json(char *buffer, size_t bufsize,
     }
 }
 
-static void build_sensor_json(char *output, size_t output_len,
+// Returns 0 on success, -1 if the reading could not be built.
+static int build_sensor_json(char *output, size_t output_len,
     const char *sensor, const char *measures, const char *unit,
     float value, int internal, const char *sensor_id,
     const char *sensor_name, const char *error_msg, time_t timestamp,
     struct bme680_calib_data *calib, int i2c_addr,
     const ws_location_t *location) {
-    
+
     char config_obj[512];
     char calib_json[384];
     char addr_str[16];
-    
-    // Build base JSON with common fields
+
+    // Build base JSON with common fields. The strings go in raw: the
+    // library escapes them.
     if (ws_build_sensor_json_base(output, output_len,
                                    sensor, "bme680", measures, unit,
                                    sensor_id, sensor_name,
                                    internal, location, timestamp) != 0) {
-        return;
+        ws_log_error("Could not build reading for %s", sensor);
+        return -1;
     }
     
     // Build config object using helpers
@@ -178,6 +181,7 @@ static void build_sensor_json(char *output, size_t output_len,
     
     // Exactly one of value or error
     ws_sensor_json_set_result(output, output_len, (double)value, 3, error_msg);
+    return 0;
 }
 
 // Build "<sensor_id>_<measurement>". Returns NULL if the id is unknown or the
@@ -212,11 +216,14 @@ static void append_reading(ws_json_array_builder_t *out, const char *sensor_id,
     // having no sensors, which is worse and silent.
     char *id = measurement_id(sensor_id, id_suffix);
 
-    build_sensor_json(json, sizeof(json), sensor, measures, unit, value,
-                      config->base.internal, id, config->base.sensor_name,
-                      error_msg, timestamp, calib, i2c_addr,
-                      &config->base.location);
-    ws_json_array_add(out, json);
+    // A reading that could not be built is not added: the array would
+    // refuse the empty item anyway, and fail as a whole.
+    if (build_sensor_json(json, sizeof(json), sensor, measures, unit, value,
+                          config->base.internal, id, config->base.sensor_name,
+                          error_msg, timestamp, calib, i2c_addr,
+                          &config->base.location) == 0) {
+        ws_json_array_add(out, json);
+    }
     free(id);
 }
 
@@ -225,16 +232,19 @@ static bool wanted(const char *filter, const char *measurement) {
     return !filter || strcmp(filter, measurement) == 0;
 }
 
-static void output_json(sensor_config_t *configs, int count, const char *filter,
-                        ws_location_filter_t location_filter) {
+// Returns WS_EXIT_SUCCESS, or WS_EXIT_INVALID_ARG with nothing printed if the
+// array could not be built: no output means "could not report", where "[]"
+// would mean "no sensors".
+static int output_json(sensor_config_t *configs, int count, const char *filter,
+                       ws_location_filter_t location_filter) {
     ws_json_array_builder_t out;
     const char *json;
     int i2c_fd;
     int i;
 
     if (ws_json_array_init(&out) != 0) {
-        fprintf(stderr, "Memory allocation failed\n");
-        return;
+        ws_log_error("Out of memory building readings");
+        return WS_EXIT_INVALID_ARG;
     }
 
     // Open I2C device once
@@ -295,7 +305,7 @@ static void output_json(sensor_config_t *configs, int count, const char *filter,
                        "pressure", "pressure", WS_UNIT_HPA,
                        reading.pressure / 100.0f, error_msg, read_timestamp, calib_out, addr);
         if (wanted(filter, "gas"))
-            append_reading(&out, sensor_id, &configs[i], "bme680_gas",
+            append_reading(&out, sensor_id, &configs[i], "bme680_gas_resistance",
                        "resistance", "gas_resistance", WS_UNIT_OHMS,
                        reading.gas_resistance, error_msg, read_timestamp, calib_out, addr);
 
@@ -307,12 +317,15 @@ static void output_json(sensor_config_t *configs, int count, const char *filter,
 
     ws_json_array_end(&out);
     json = ws_json_array_get(&out);
-    if (json) {
-        printf("%s\n", json);
-    } else {
-        fprintf(stderr, "Memory allocation failed\n");
+    if (!json) {
+        ws_log_error("Out of memory building readings");
+        ws_json_array_free(&out);
+        return WS_EXIT_INVALID_ARG;
     }
+
+    printf("%s\n", json);
     ws_json_array_free(&out);
+    return WS_EXIT_SUCCESS;
 }
 
 int main(int argc, char *argv[]) {
@@ -328,6 +341,7 @@ int main(int argc, char *argv[]) {
     sensor_config_t default_config = {0};
     int config_count = 0;
     ws_location_filter_t location_filter = WS_LOCATION_ALL;
+    int status;
 
     if (argc >= 2) {
         if (strcmp(argv[1], "identify") == 0) {
@@ -353,10 +367,10 @@ int main(int argc, char *argv[]) {
             // hardware. The values are ours; the formatting is the library's,
             // so mock cannot drift from what a real read produces.
             static const ws_mock_reading_t mock[] = {
-                { "bme680_temperature", "temperature", NULL,             WS_UNIT_CELSIUS,      23.5, 3 },
-                { "bme680_humidity",    "humidity",    NULL,             WS_UNIT_PERCENTAGE,   45.0, 3 },
-                { "bme680_pressure",    "pressure",    NULL,             WS_UNIT_HPA,        1013.25, 3 },
-                { "bme680_gas",         "resistance",  "gas_resistance", WS_UNIT_OHMS,      50000.0, 3 },
+                { "bme680_temperature",      "temperature", NULL,             WS_UNIT_CELSIUS,      23.5, 3 },
+                { "bme680_humidity",         "humidity",    NULL,             WS_UNIT_PERCENTAGE,   45.0, 3 },
+                { "bme680_pressure",         "pressure",    NULL,             WS_UNIT_HPA,        1013.25, 3 },
+                { "bme680_gas_resistance",   "resistance",  "gas_resistance", WS_UNIT_OHMS,      50000.0, 3 },
             };
             return ws_cmd_mock("bme680", "bme680_mock", "Mock BME680",
                                mock, sizeof(mock) / sizeof(mock[0]));
@@ -371,6 +385,12 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    /* Every reading needs the template, so ask once before touching the
+       sensor. Without it, fail with nothing printed: "[]" would claim the
+       node has no sensors, and a partial array is not JSON at all. */
+    status = ws_require_prototype();
+    if (status != 0) return status;
+
     configs = load_config(CONFIG_PATH, &config_count);
     if (configs == NULL || config_count == 0) {
         char *serial = ws_get_serial_with_suffix("bme680");
@@ -382,7 +402,7 @@ int main(int argc, char *argv[]) {
         config_count = 1;
     }
 
-    output_json(configs, config_count, filter, location_filter);
+    status = output_json(configs, config_count, filter, location_filter);
 
     if (configs == &default_config) {
         free(default_config.base.sensor_id);
@@ -390,5 +410,5 @@ int main(int argc, char *argv[]) {
     } else {
         free_config(configs, config_count);
     }
-    return WS_EXIT_SUCCESS;
+    return status;
 }

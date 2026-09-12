@@ -1,5 +1,15 @@
 sensor-bme680 (2.3.0) stable; urgency=medium
 
+  * Fail with nothing printed, exit 20, when sc-prototype is unavailable. The
+    template was checked per reading, after the sensor had been read, and the
+    unbuilt reading was appended anyway: the output was "[,,,]" with exit 0,
+    which is not JSON. The check now happens once, before the I2C bus is
+    opened, via the library's ws_require_prototype()
+  * Out of memory while building the array is also exit 20 with no output,
+    rather than exit 0 with no output, which read as success to sr
+  * sensor_id and sensor_name are now escaped, by libwildlifesystems 1.3.0. A
+    quote in either, typed into the config file, ended the JSON string early
+    and invalidated every reading this driver emitted
   * Accept the measurements that list advertises. "sensor-bme680 temperature"
     and the other three were rejected with exit 20, though list named all four
     and sensor-dht11 accepted its own two, so anything discovering a driver's
@@ -40,6 +50,13 @@ sensor-bme680 (2.3.0) stable; urgency=medium
     behaviour above is fixed at build time: a binary built against 1.2.0 would
     satisfy the old pin and silently emit unresolved tokens under the same
     package version
+  * Rename the gas reading's "sensor" from "bme680_gas" to
+    "bme680_gas_resistance", matching the "_gas_resistance" its sensor_id has
+    always used. The two disagreed, so the same reading answered to one name in
+    "sensor" and another in "sensor_id". The sensor_id is the identifier already
+    in use downstream, so "sensor" is the side that moves. Note that
+    "sr --sensor bme680_gas" becomes "sr --sensor bme680_gas_resistance"; the
+    measurement name used by "sensor-bme680 gas" is unchanged
 
  -- Ed Baker <ed@ebaker.me.uk>  Sat, 12 Sep 2026 14:00:00 +0100
 
