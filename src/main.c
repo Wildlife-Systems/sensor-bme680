@@ -188,12 +188,25 @@ static void build_sensor_json(char *output, size_t output_len,
     ws_config_end(config_obj);
     ws_sensor_json_set_config(output, output_len, config_obj);
     
-    // Add value or error
-    if (error_msg) {
-        ws_sensor_json_set_error(output, error_msg);
-    } else {
-        ws_sensor_json_set_value(output, (double)value, 3);
-    }
+    // Exactly one of value or error
+    ws_sensor_json_set_result(output, output_len, (double)value, 3, error_msg);
+}
+
+// Build "<sensor_id>_<measurement>". Returns NULL if the id is unknown or the
+// allocation fails; the caller then emits the reading with a null sensor_id
+// rather than dereferencing NULL.
+static char *measurement_id(const char *sensor_id, const char *measurement) {
+    size_t len;
+    char *out;
+
+    if (!sensor_id) return NULL;
+
+    len = strlen(sensor_id) + strlen(measurement) + 2;  // '_' and terminator
+    out = malloc(len);
+    if (!out) return NULL;
+
+    snprintf(out, len, "%s_%s", sensor_id, measurement);
+    return out;
 }
 
 static void output_json(sensor_config_t *configs, int count, ws_location_filter_t location_filter) {
@@ -246,8 +259,7 @@ static void output_json(sensor_config_t *configs, int count, ws_location_filter_
         // Output JSON for temperature
         {
             char temp_json[2048];
-            char *sensor_id_temp = malloc(strlen(sensor_id) + 16);
-            snprintf(sensor_id_temp, strlen(sensor_id) + 16, "%s_temperature", sensor_id);
+            char *sensor_id_temp = measurement_id(sensor_id, "temperature");
             build_sensor_json(temp_json, sizeof(temp_json),
                 "bme680_temperature", "temperature", "Celsius",
                 reading.temperature, configs[i].internal, sensor_id_temp,
@@ -269,8 +281,7 @@ static void output_json(sensor_config_t *configs, int count, ws_location_filter_
         // Output JSON for humidity
         {
             char humid_json[2048];
-            char *sensor_id_humid = malloc(strlen(sensor_id) + 16);
-            snprintf(sensor_id_humid, strlen(sensor_id) + 16, "%s_humidity", sensor_id);
+            char *sensor_id_humid = measurement_id(sensor_id, "humidity");
             build_sensor_json(humid_json, sizeof(humid_json),
                 "bme680_humidity", "humidity", "percentage",
                 reading.humidity, configs[i].internal, sensor_id_humid,
@@ -292,8 +303,7 @@ static void output_json(sensor_config_t *configs, int count, ws_location_filter_
         // Output JSON for pressure
         {
             char press_json[2048];
-            char *sensor_id_press = malloc(strlen(sensor_id) + 16);
-            snprintf(sensor_id_press, strlen(sensor_id) + 16, "%s_pressure", sensor_id);
+            char *sensor_id_press = measurement_id(sensor_id, "pressure");
             build_sensor_json(press_json, sizeof(press_json),
                 "bme680_pressure", "pressure", "hPa",
                 reading.pressure / 100.0, configs[i].internal, sensor_id_press,
@@ -315,8 +325,7 @@ static void output_json(sensor_config_t *configs, int count, ws_location_filter_
         // Output JSON for gas resistance
         {
             char gas_json[2048];
-            char *sensor_id_gas = malloc(strlen(sensor_id) + 16);
-            snprintf(sensor_id_gas, strlen(sensor_id) + 16, "%s_gas_resistance", sensor_id);
+            char *sensor_id_gas = measurement_id(sensor_id, "gas_resistance");
             build_sensor_json(gas_json, sizeof(gas_json),
                 "bme680_gas", "resistance", "Ohms",
                 reading.gas_resistance, configs[i].internal, sensor_id_gas,
@@ -375,12 +384,16 @@ int main(int argc, char *argv[]) {
         } else if (strcmp(argv[1], "mock") == 0) {
             /* Output mock data for testing without hardware */
             char *serial = ws_get_serial_with_suffix("bme680_mock");
+            /* No Pi serial (a non-Pi I2C host, or an unreadable /proc/cpuinfo)
+               must not reach "%s" as NULL. Mock exists to work without the
+               hardware, so fall back to a fixed id rather than failing. */
+            const char *base = serial ? serial : "bme680_mock";
             time_t now = time(NULL);
             char json[2048];
             printf("[");
             /* Temperature */
             char temp_id[128];
-            snprintf(temp_id, sizeof(temp_id), "%s_temperature", serial);
+            snprintf(temp_id, sizeof(temp_id), "%s_temperature", base);
             if (ws_build_sensor_json_base(json, sizeof(json), "bme680_temperature", "bme680", "temperature", "Celsius",
                                           temp_id, "Mock BME680", false, NULL, now) == 0) {
                 ws_sensor_json_set_value(json, 23.5, 3);
@@ -388,7 +401,7 @@ int main(int argc, char *argv[]) {
             }
             /* Humidity */
             char humid_id[128];
-            snprintf(humid_id, sizeof(humid_id), "%s_humidity", serial);
+            snprintf(humid_id, sizeof(humid_id), "%s_humidity", base);
             if (ws_build_sensor_json_base(json, sizeof(json), "bme680_humidity", "bme680", "humidity", "percentage",
                                           humid_id, "Mock BME680", false, NULL, now) == 0) {
                 ws_sensor_json_set_value(json, 45.0, 3);
@@ -396,7 +409,7 @@ int main(int argc, char *argv[]) {
             }
             /* Pressure */
             char press_id[128];
-            snprintf(press_id, sizeof(press_id), "%s_pressure", serial);
+            snprintf(press_id, sizeof(press_id), "%s_pressure", base);
             if (ws_build_sensor_json_base(json, sizeof(json), "bme680_pressure", "bme680", "pressure", "hPa",
                                           press_id, "Mock BME680", false, NULL, now) == 0) {
                 ws_sensor_json_set_value(json, 1013.25, 3);
@@ -404,7 +417,7 @@ int main(int argc, char *argv[]) {
             }
             /* Gas */
             char gas_id[128];
-            snprintf(gas_id, sizeof(gas_id), "%s_gas_resistance", serial);
+            snprintf(gas_id, sizeof(gas_id), "%s_gas_resistance", base);
             if (ws_build_sensor_json_base(json, sizeof(json), "bme680_gas", "bme680", "resistance", "Ohms",
                                           gas_id, "Mock BME680", false, NULL, now) == 0) {
                 ws_sensor_json_set_value(json, 50000.0, 3);
