@@ -1,5 +1,14 @@
 sensor-bme680 (2.3.0) stable; urgency=medium
 
+  * No longer crashes when no sensor_id can be determined. A config entry
+    without sensor_id on a host whose /proc/cpuinfo has no Serial line (a
+    non-Pi I2C host) left sensor_id NULL, which was then passed to strlen().
+    The reading is now emitted with a null sensor_id instead
+  * The four per-measurement id allocations are no longer unchecked, and the
+    duplicated size arithmetic is now in one helper
+  * "mock" no longer prints "(null)_temperature" where the host has no Pi
+    serial; it falls back to a fixed id, mock being the command meant to work
+    without the hardware
   * Rebuild against libwildlifesystems 1.3.0, so "{{node}}" in a sensor's
     location resolves to the node's own coordinates from /etc/geolocation
     instead of being emitted as an unresolved token
