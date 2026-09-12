@@ -1,5 +1,7 @@
 sensor-bme680 (2.3.0) stable; urgency=medium
 
+  * "mock" is a table of values passed to the library rather than hand-built
+    JSON, so it cannot drift from the real output format
   * "enable" now enables I2C, by adding dtparam=i2c_arm=on to the Pi boot
     config, instead of printing a note telling the user to run raspi-config.
     The kernel exposes no I2C bus until that is set, so a driver whose "enable"
