@@ -294,7 +294,7 @@ static int output_json(sensor_config_t *configs, int count, const char *filter,
         struct bme680_calib_data calib = {0};
         struct bme680_calib_data *calib_out = NULL;
         const char *error_msg = NULL;
-        time_t read_timestamp = time(NULL);
+        time_t read_timestamp;
         const char *sensor_id;
         int addr;
 
@@ -330,6 +330,10 @@ static int output_json(sensor_config_t *configs, int count, const char *filter,
                 calib_out = &calib;
             }
         }
+
+        // Stamped when the value was obtained, not before the read. Every
+        // driver stamps after its read, so the field means one thing.
+        read_timestamp = time(NULL);
 
         if (wanted(filter, "temperature"))
             append_reading(&out, sensor_id, &configs[i], "bme680_temperature",
