@@ -207,9 +207,10 @@ static void append_reading(ws_json_array_builder_t *out, const char *sensor_id,
                            time_t timestamp, struct bme680_calib_data *calib,
                            int i2c_addr) {
     char json[2048];
+    // An unknown id leaves "sensor_id":null, which records that it is
+    // unknown. Dropping the reading instead would report the node as
+    // having no sensors, which is worse and silent.
     char *id = measurement_id(sensor_id, id_suffix);
-
-    if (!id) return;
 
     build_sensor_json(json, sizeof(json), sensor, measures, unit, value,
                       config->base.internal, id, config->base.sensor_name,
@@ -219,7 +220,13 @@ static void append_reading(ws_json_array_builder_t *out, const char *sensor_id,
     free(id);
 }
 
-static void output_json(sensor_config_t *configs, int count, ws_location_filter_t location_filter) {
+// A NULL filter means every measurement.
+static bool wanted(const char *filter, const char *measurement) {
+    return !filter || strcmp(filter, measurement) == 0;
+}
+
+static void output_json(sensor_config_t *configs, int count, const char *filter,
+                        ws_location_filter_t location_filter) {
     ws_json_array_builder_t out;
     const char *json;
     int i2c_fd;
@@ -275,16 +282,20 @@ static void output_json(sensor_config_t *configs, int count, ws_location_filter_
             }
         }
 
-        append_reading(&out, sensor_id, &configs[i], "bme680_temperature",
+        if (wanted(filter, "temperature"))
+            append_reading(&out, sensor_id, &configs[i], "bme680_temperature",
                        "temperature", "temperature", WS_UNIT_CELSIUS,
                        reading.temperature, error_msg, read_timestamp, calib_out, addr);
-        append_reading(&out, sensor_id, &configs[i], "bme680_humidity",
+        if (wanted(filter, "humidity"))
+            append_reading(&out, sensor_id, &configs[i], "bme680_humidity",
                        "humidity", "humidity", WS_UNIT_PERCENTAGE,
                        reading.humidity, error_msg, read_timestamp, calib_out, addr);
-        append_reading(&out, sensor_id, &configs[i], "bme680_pressure",
+        if (wanted(filter, "pressure"))
+            append_reading(&out, sensor_id, &configs[i], "bme680_pressure",
                        "pressure", "pressure", WS_UNIT_HPA,
                        reading.pressure / 100.0f, error_msg, read_timestamp, calib_out, addr);
-        append_reading(&out, sensor_id, &configs[i], "bme680_gas",
+        if (wanted(filter, "gas"))
+            append_reading(&out, sensor_id, &configs[i], "bme680_gas",
                        "resistance", "gas_resistance", WS_UNIT_OHMS,
                        reading.gas_resistance, error_msg, read_timestamp, calib_out, addr);
 
@@ -305,6 +316,10 @@ static void output_json(sensor_config_t *configs, int count, ws_location_filter_
 }
 
 int main(int argc, char *argv[]) {
+    // What this driver measures: the one source for the list command,
+    // the measurement filters it accepts, and its usage line.
+    static const char *measurements[] = {"temperature", "humidity", "pressure", "gas", NULL};
+    const char *filter = NULL;
     sensor_config_t *configs = NULL;
     /* Zero-initialised: the default path sets each field explicitly except
        location, which must read as WS_LOC_UNDECLARED rather than whatever
@@ -318,7 +333,6 @@ int main(int argc, char *argv[]) {
         if (strcmp(argv[1], "identify") == 0) {
             ws_cmd_identify();
         } else if (strcmp(argv[1], "list") == 0) {
-            static const char *measurements[] = {"temperature", "humidity", "pressure", "gas", NULL};
             ws_cmd_list_multiple(measurements);
         } else if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0 || strcmp(argv[1], "version") == 0) {
             ws_print_version("sensor-bme680", VERSION);
@@ -346,14 +360,14 @@ int main(int argc, char *argv[]) {
             };
             return ws_cmd_mock("bme680", "bme680_mock", "Mock BME680",
                                mock, sizeof(mock) / sizeof(mock[0]));
+        } else if (ws_arg_is_measurement(argv[1], measurements)) {
+            filter = argv[1];
         } else if (strcmp(argv[1], "internal") == 0) {
             location_filter = WS_LOCATION_INTERNAL;
         } else if (strcmp(argv[1], "external") == 0) {
             location_filter = WS_LOCATION_EXTERNAL;
         } else if (strcmp(argv[1], "all") != 0) {
-            fprintf(stderr, "Unknown command: %s\n", argv[1]);
-            fprintf(stderr, "Usage: sensor-bme680 [--version|identify|list|setup|enable|mock|internal|external|all]\n");
-            return WS_EXIT_INVALID_ARG;
+            return ws_cmd_unknown_arg("sensor-bme680", argv[1], measurements);
         }
     }
 
@@ -368,7 +382,7 @@ int main(int argc, char *argv[]) {
         config_count = 1;
     }
 
-    output_json(configs, config_count, location_filter);
+    output_json(configs, config_count, filter, location_filter);
 
     if (configs == &default_config) {
         free(default_config.base.sensor_id);
