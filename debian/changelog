@@ -1,5 +1,15 @@
 sensor-bme680 (2.3.0) stable; urgency=medium
 
+  * Accept the measurements that list advertises. "sensor-bme680 temperature"
+    and the other three were rejected with exit 20, though list named all four
+    and sensor-dht11 accepted its own two, so anything discovering a driver's
+    capabilities through list could ask for a measurement and be refused
+  * A reading whose sensor_id cannot be determined is emitted with
+    "sensor_id":null rather than dropped. On a host with no Serial line in
+    /proc/cpuinfo, which a non-Pi I2C host may be, every reading was being
+    discarded and the node reported as having no sensors at all
+  * The usage line is generated from the measurement list rather than written by
+    hand, so it cannot omit what the driver accepts
   * "mock" is a table of values passed to the library rather than hand-built
     JSON, so it cannot drift from the real output format
   * "enable" now enables I2C, by adding dtparam=i2c_arm=on to the Pi boot
