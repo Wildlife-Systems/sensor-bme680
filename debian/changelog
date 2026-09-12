@@ -1,5 +1,14 @@
 sensor-bme680 (2.3.0) stable; urgency=medium
 
+  * Two config entries without a sensor_id no longer get the same one. Both
+    used to be "<serial>_bme680", so a sensor at each I2C address was merged
+    downstream into one series without a word. A lone entry keeps that id, so
+    no existing node's datastreams move; where more than one entry omits it,
+    each is "<serial>_bme680_0x76" or "_0x77". Assigned by the library at
+    load time rather than per read, and it warns about any two entries that
+    still share an id
+  * Call ws_log_init, so the library's warnings reach syslog under this
+    driver's name; they were going out under no name at all
   * Mock readings declare location "{{node}}", as sensor-onboard's mock
     declares its physical sensors, so every driver's mock has one shape.
     They used to emit location null, which is what an unconfigured sensor

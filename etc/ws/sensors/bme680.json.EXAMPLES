@@ -4,7 +4,10 @@
 // Configuration options:
 //   "internal"    - boolean: true for internal sensors, false for external
 //   "sensor_id"   - string: unique identifier for this sensor (optional)
-//                   If omitted, defaults to <serial_number>_bme680
+//                   If omitted, defaults to <serial_number>_bme680; where more
+//                   than one entry omits it, to <serial_number>_bme680_0x76 and
+//                   _0x77 so the two do not share an id. Each measurement then
+//                   appends its name, e.g. <serial_number>_bme680_temperature
 //   "sensor_name" - string: human-readable name (optional)
 //   "i2c_addr"    - string: I2C address "0x76" or "0x77" (optional)
 //                   If omitted, auto-detects first available sensor

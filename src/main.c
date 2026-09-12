@@ -67,6 +67,21 @@ static int parse_i2c_addr(const char *ptr, const char *end) {
     return addr;
 }
 
+static void free_config(sensor_config_t *configs, int count);
+
+// What tells one BME680 from another when neither has a configured id: the
+// I2C address it is read from. Two entries left to auto-detect cannot be told
+// apart, and in truth both read whichever chip is found first; they get the
+// same id and the library warns about it.
+static void addr_designation(const void *entry, char *buf, size_t cap) {
+    int addr = ((const sensor_config_t *)entry)->i2c_addr;
+    if (addr > 0) {
+        snprintf(buf, cap, "0x%02x", addr);
+    } else {
+        snprintf(buf, cap, "auto");
+    }
+}
+
 // Parse a simple JSON config file - returns dynamically allocated array
 static sensor_config_t *load_config(const char *path, int *count) {
     ws_config_iter_t it;
@@ -94,6 +109,16 @@ static sensor_config_t *load_config(const char *path, int *count) {
     }
 
     ws_config_iter_close(&it);
+
+    // Entries without a sensor_id get one from the node serial. The library
+    // keeps a lone entry at "<serial>_bme680", as the default config has
+    // always produced, and tells two or more apart by I2C address.
+    if (ws_config_assign_fallback_ids(configs, sizeof(*configs), idx, "bme680",
+                                      addr_designation) < 0) {
+        free_config(configs, idx);
+        return NULL;
+    }
+
     *count = idx;
     return configs;
 }
@@ -256,14 +281,15 @@ static int output_json(sensor_config_t *configs, int count, const char *filter,
         struct bme680_calib_data *calib_out = NULL;
         const char *error_msg = NULL;
         time_t read_timestamp = time(NULL);
-        char *sensor_id;
+        const char *sensor_id;
         int addr;
 
         if (location_filter == WS_LOCATION_INTERNAL && !configs[i].base.internal) continue;
         if (location_filter == WS_LOCATION_EXTERNAL && configs[i].base.internal) continue;
 
-        sensor_id = configs[i].base.sensor_id ? strdup(configs[i].base.sensor_id)
-                                              : ws_get_serial_with_suffix("bme680");
+        // Assigned at load time when the config omitted it; NULL only when
+        // the node has no serial, and then reported as null.
+        sensor_id = configs[i].base.sensor_id;
 
         // Read sensor - use configured address or auto-detect
         addr = configs[i].i2c_addr;
@@ -308,8 +334,6 @@ static int output_json(sensor_config_t *configs, int count, const char *filter,
             append_reading(&out, sensor_id, &configs[i], "bme680_gas_resistance",
                        "resistance", "gas_resistance", WS_UNIT_OHMS,
                        reading.gas_resistance, error_msg, read_timestamp, calib_out, addr);
-
-        free(sensor_id);
     }
 
     // Close I2C device once after all readings
@@ -342,6 +366,10 @@ int main(int argc, char *argv[]) {
     int config_count = 0;
     ws_location_filter_t location_filter = WS_LOCATION_ALL;
     int status;
+
+    /* So the library's warnings reach syslog under this driver's name, as
+       sensor-dht11's do. */
+    ws_log_init("sensor-bme680");
 
     if (argc >= 2) {
         if (strcmp(argv[1], "identify") == 0) {
