@@ -335,50 +335,17 @@ int main(int argc, char *argv[]) {
             printf("BME680 sensor requires no additional setup.\n");
             return WS_EXIT_SUCCESS;
         } else if (strcmp(argv[1], "mock") == 0) {
-            /* Output mock data for testing without hardware */
-            char *serial = ws_get_serial_with_suffix("bme680_mock");
-            /* No Pi serial (a non-Pi I2C host, or an unreadable /proc/cpuinfo)
-               must not reach "%s" as NULL. Mock exists to work without the
-               hardware, so fall back to a fixed id rather than failing. */
-            const char *base = serial ? serial : "bme680_mock";
-            time_t now = time(NULL);
-            char json[2048];
-            printf("[");
-            /* Temperature */
-            char temp_id[128];
-            snprintf(temp_id, sizeof(temp_id), "%s_temperature", base);
-            if (ws_build_sensor_json_base(json, sizeof(json), "bme680_temperature", "bme680", "temperature", WS_UNIT_CELSIUS,
-                                          temp_id, "Mock BME680", false, NULL, now) == 0) {
-                ws_sensor_json_set_value(json, 23.5, 3);
-                printf("%s", json);
-            }
-            /* Humidity */
-            char humid_id[128];
-            snprintf(humid_id, sizeof(humid_id), "%s_humidity", base);
-            if (ws_build_sensor_json_base(json, sizeof(json), "bme680_humidity", "bme680", "humidity", WS_UNIT_PERCENTAGE,
-                                          humid_id, "Mock BME680", false, NULL, now) == 0) {
-                ws_sensor_json_set_value(json, 45.0, 3);
-                printf(",%s", json);
-            }
-            /* Pressure */
-            char press_id[128];
-            snprintf(press_id, sizeof(press_id), "%s_pressure", base);
-            if (ws_build_sensor_json_base(json, sizeof(json), "bme680_pressure", "bme680", "pressure", WS_UNIT_HPA,
-                                          press_id, "Mock BME680", false, NULL, now) == 0) {
-                ws_sensor_json_set_value(json, 1013.25, 3);
-                printf(",%s", json);
-            }
-            /* Gas */
-            char gas_id[128];
-            snprintf(gas_id, sizeof(gas_id), "%s_gas_resistance", base);
-            if (ws_build_sensor_json_base(json, sizeof(json), "bme680_gas", "bme680", "resistance", WS_UNIT_OHMS,
-                                          gas_id, "Mock BME680", false, NULL, now) == 0) {
-                ws_sensor_json_set_value(json, 50000.0, 3);
-                printf(",%s", json);
-            }
-            printf("]\n");
-            free(serial);
-            return WS_EXIT_SUCCESS;
+            // Fixed readings in the real output format, for testing without
+            // hardware. The values are ours; the formatting is the library's,
+            // so mock cannot drift from what a real read produces.
+            static const ws_mock_reading_t mock[] = {
+                { "bme680_temperature", "temperature", NULL,             WS_UNIT_CELSIUS,      23.5, 3 },
+                { "bme680_humidity",    "humidity",    NULL,             WS_UNIT_PERCENTAGE,   45.0, 3 },
+                { "bme680_pressure",    "pressure",    NULL,             WS_UNIT_HPA,        1013.25, 3 },
+                { "bme680_gas",         "resistance",  "gas_resistance", WS_UNIT_OHMS,      50000.0, 3 },
+            };
+            return ws_cmd_mock("bme680", "bme680_mock", "Mock BME680",
+                               mock, sizeof(mock) / sizeof(mock[0]));
         } else if (strcmp(argv[1], "internal") == 0) {
             location_filter = WS_LOCATION_INTERNAL;
         } else if (strcmp(argv[1], "external") == 0) {
