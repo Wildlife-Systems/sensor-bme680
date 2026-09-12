@@ -367,10 +367,12 @@ int main(int argc, char *argv[]) {
             // hardware. The values are ours; the formatting is the library's,
             // so mock cannot drift from what a real read produces.
             static const ws_mock_reading_t mock[] = {
-                { "bme680_temperature",      "temperature", NULL,             WS_UNIT_CELSIUS,      23.5, 3 },
-                { "bme680_humidity",         "humidity",    NULL,             WS_UNIT_PERCENTAGE,   45.0, 3 },
-                { "bme680_pressure",         "pressure",    NULL,             WS_UNIT_HPA,        1013.25, 3 },
-                { "bme680_gas_resistance",   "resistance",  "gas_resistance", WS_UNIT_OHMS,      50000.0, 3 },
+                // Declared at the node, as sensor-onboard's mock declares its
+                // physical sensors, so every driver's mock has one shape.
+                { "bme680_temperature",      "temperature", NULL,             WS_UNIT_CELSIUS,      23.5, 3, "{{node}}" },
+                { "bme680_humidity",         "humidity",    NULL,             WS_UNIT_PERCENTAGE,   45.0, 3, "{{node}}" },
+                { "bme680_pressure",         "pressure",    NULL,             WS_UNIT_HPA,        1013.25, 3, "{{node}}" },
+                { "bme680_gas_resistance",   "resistance",  "gas_resistance", WS_UNIT_OHMS,      50000.0, 3, "{{node}}" },
             };
             return ws_cmd_mock("bme680", "bme680_mock", "Mock BME680",
                                mock, sizeof(mock) / sizeof(mock[0]));
