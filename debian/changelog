@@ -1,5 +1,11 @@
 sensor-bme680 (2.3.0) stable; urgency=medium
 
+  * Documentation: the README documented an "address" configuration key the
+    driver has never read (it is i2c_addr), said enable merely reminds the
+    user to run raspi-config, and showed the old bme680_gas name. The man
+    page gains CONFIGURATION, OUTPUT and EXIT STATUS sections, the four
+    measurement commands, and the location field; its header is brought up to
+    this version. The examples file shows location
   * Packaging: a package description that says what the driver measures and
     how it fits; Standards-Version 4.6.1; the lintian override for our
     "stable" distribution; "make uninstall" removes the man page it installed;
